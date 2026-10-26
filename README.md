@@ -184,3 +184,37 @@ trong phiên nghiên cứu; không coi nội dung video là nguồn đã xác mi
 
 Kiểm thử mới: `node --test test_analytics.cjs`, `node test_ui.cjs` (DOM mô phỏng,
 không phải kiểm thử hiển thị bằng trình duyệt). Chưa cài trên máy chủ người dùng.
+
+
+## v0.6.0 — Dashboard Analytics
+
+Dashboard tập trung vào 4 mục: Tổng quan, Ứng dụng, Người dùng và Thanh toán.
+
+- Bỏ lời giới thiệu, dòng trạng thái node/số sự kiện/số lỗi, tab Nguồn & cách tính,
+  các ô doanh thu/chi phí/chuyển đổi chưa kết nối và bộ lọc tên tài khoản.
+- Tên Dashboard Analytics, liên kết Về Trang chủ; tự loại admin, không có checkbox.
+  Tài khoản quản trị hiện tại và dấu admin trong audit đều bị loại khỏi phân tích.
+- Tổng quan: người sử dụng duy nhất cả kỳ, Free, VIP, giờ sử dụng, so sánh kỳ trước;
+  biểu đồ ngày; top khung giờ theo người duy nhất; ứng dụng hàng đầu; heatmap.
+  Một người đổi gói có thể nằm trong cả hai nhóm, không cộng hai nhóm thành tổng.
+- Ứng dụng: tổng giờ từng ứng dụng có phân màu và cột Free/VIP/chưa xác định,
+  số người, tỷ trọng thời lượng, chi tiết ngày. Tab này luôn hiển thị cả hai gói
+  nên bộ lọc nhóm bị tắt; bộ lọc ngày và ứng dụng vẫn hoạt động.
+- Người dùng: bảng Free và VIP trong kỳ, ngày sử dụng, tên ứng dụng, giờ/người;
+  chọn ngày xem số người và ứng dụng theo từng giờ, thời điểm mở/đóng và timeline.
+  Không hiển thị ID phiên, ID đơn hay chỉ số “phiên đủ mốc”. Nội bộ vẫn chỉ tính
+  thời lượng có mở và đóng để không suy đoán thời gian khi thiếu nhật ký.
+- Hạn mức VIP: đọc trực tiếp user_manager.get_effective_settings và
+  quota.used_hours của Sealskin. Hiện người VIP hiện tại, giờ quy đổi đã dùng,
+  hạn mức tháng, còn lại, %, cảnh báo gần hết (>=80%) / hết; giới hạn 0 hợp lệ.
+  Chu kỳ là tháng UTC hiện tại, bao gồm mọi pool/node mà bộ đếm Sealskin đọc được,
+  hệ số pool, thời gian trước khi đổi gói và phiên đang chạy đã tick. Không phụ
+  thuộc ngày/gói/ứng dụng đang lọc. Hạn mức tuần/ngày được ghi rõ, không đổi thành
+  tháng; không giới hạn hoặc không đọc được không bị hiển thị thành 0 giờ.
+- Thanh toán: giữ dữ liệu thử nghiệm đúng nguồn, đơn tạo/xác nhận/chờ, tỷ lệ
+  hoàn tất, gói mua, bảng theo ngày và giao dịch; không suy ra doanh thu từ demo.
+- Tổng giờ audit vẫn là thời gian mở ứng dụng, gồm thời gian chờ; khác giờ quy
+  đổi dùng để trừ hạn mức. Dữ liệu cũ không có gói vẫn giữ Chưa xác định.
+
+Cài đặt và rollback dùng lệnh như trên. Bộ cài tự tìm thư mục app Python, không
+cần sửa UI_PATH hay chép vào thư mục ui. Chưa cài trực tiếp trên máy chủ người dùng.

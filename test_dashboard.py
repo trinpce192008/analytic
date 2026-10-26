@@ -60,6 +60,33 @@ class Tests(unittest.TestCase):
       before=path.read_bytes();r=mod.billing_summary(path)
       self.assertEqual(r['orders'][0]['is_test'],1)
       self.assertIsNone(r['real_revenue']);self.assertEqual(path.read_bytes(),before)
+ def test_quota_uses_sealskin_counters_and_omits_admin_and_secrets(self):
+    um=types.ModuleType('app.user_manager')
+    um.USER_DATA={'vip':{'username':'vip','private_key':'NEVER_RETURN'},'weekly':{'username':'weekly'},'free':{'username':'free'},'manager':{'is_admin':True}}
+    um.get_effective_settings=lambda name:{'allowance_hours':10,'allowance_period':'week' if name=='weekly' else 'month','admin':name=='manager'}
+    um.groups_of=lambda name:['warden_free'] if name=='free' else ['warden_vip']
+    quota=types.ModuleType('app.quota'); quota.used_hours=lambda name,period:8.5 if period=='month' else 2
+    saved_um=sys.modules.get('app.user_manager');saved_q=sys.modules.get('app.quota')
+    sys.modules['app.user_manager']=um;sys.modules['app.quota']=quota
+    pkg.user_manager=um;pkg.quota=quota
+    try:
+      result=mod.account_summary()
+      self.assertEqual(result['admin_users'],['admin','manager'])
+      users={u['user']:u for u in result['vip_quota']['users']}
+      self.assertEqual(set(users),{'vip','weekly'})
+      self.assertEqual(users['vip']['used_hours'],8.5)
+      self.assertEqual(users['weekly']['used_hours'],2)
+      self.assertEqual(users['weekly']['month_used_hours'],8.5)
+      self.assertNotIn('NEVER_RETURN',json.dumps(result))
+      response=client.get('/api/warden-analytics/data',headers={'x-test-role':'root'}).json()
+      self.assertEqual(response['admin_users'],['admin','manager'])
+    finally:
+      if saved_um:sys.modules['app.user_manager']=saved_um
+      else:sys.modules.pop('app.user_manager',None)
+      if saved_q:sys.modules['app.quota']=saved_q
+      else:sys.modules.pop('app.quota',None)
+      for attr in ('user_manager','quota'):
+        if hasattr(pkg,attr):delattr(pkg,attr)
  def test_no_store(self):
     r=client.get('/api/warden-analytics/data',headers={'x-test-role':'root'})
     self.assertEqual(r.headers['cache-control'],'no-store')

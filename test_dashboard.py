@@ -10,6 +10,7 @@ async def verify_admin(x_test_role: str=Header(default='')):
     if not x_test_role: raise HTTPException(401)
     if x_test_role=='user': raise HTTPException(403)
     return {'username':'admin' if x_test_role=='root' else 'other_admin','is_admin':True}
+audit=types.ModuleType('app.audit'); audit.record=lambda *a,**k:None; sys.modules['app.audit']=audit
 security.verify_admin=verify_admin;sys.modules['app.security']=security
 settings=types.ModuleType('app.settings');settings.settings=types.SimpleNamespace(node_state_path='/unused');sys.modules['app.settings']=settings
 spec=importlib.util.spec_from_file_location('app.warden_analytics',ROOT/'warden_analytics.py');mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
@@ -31,6 +32,22 @@ class Tests(unittest.TestCase):
       self.assertEqual(len(result['events']),2); self.assertEqual(result['skipped'],2)
       self.assertEqual(result['events'][0]['event'],'launch')
       self.assertTrue(mod.load_events(d,1)['limited'])
+ def test_sanitized_events(self):
+    with tempfile.TemporaryDirectory() as d:
+      Path(d,'2026-10-21.log').write_text(json.dumps({'event':'launch','time':'2026-10-21T00:00:00Z','access_token':'secret','plan':'free'})+'\n')
+      e=mod.load_events(d)['events'][0]
+      self.assertNotIn('access_token',e); self.assertEqual(e['plan'],'free')
+ def test_plan_hook(self):
+    um=types.ModuleType('app.user_manager')
+    um.groups_of=lambda user:['warden_vip']
+    um.get_effective_settings=lambda user:{}
+    sys.modules['app.user_manager']=um
+    captured=[];audit.record=lambda event,user='',**fields:captured.append(fields)
+    mod.install_audit_hook();first=audit.record;mod.install_audit_hook()
+    self.assertIs(first,audit.record)
+    audit.record('launch','u');self.assertEqual(captured[-1]['plan'],'vip')
+    um.groups_of=lambda user:[]
+    audit.record('launch','u');self.assertEqual(captured[-1]['plan'],'unknown')
  def test_no_store(self):
     r=client.get('/api/warden-analytics/data',headers={'x-test-role':'root'})
     self.assertEqual(r.headers['cache-control'],'no-store')

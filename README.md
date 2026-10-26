@@ -71,3 +71,56 @@ Nếu preflight báo “Unsupported”, dừng tại đó và gửi thông báo 
 
 - https://github.com/selkies-project/sealskin
 - https://docs.sealskin.app/latest/api
+
+## Warden Analytics v0.2.0 — phân tích nhiều ngày
+
+Bản này cập nhật dashboard trong Sealskin; không thay thế phần mềm Windows
+Warden Desktop v0.1.3. Không có biểu đồ giữ chân D1/D7/D30.
+
+Cập nhật trên host đã clone repository:
+
+```bash
+cd /home/ubuntu/analytic
+git pull --ff-only
+sudo bash install.sh sealskin
+```
+
+Docker sẽ khởi động lại; thực hiện lúc không có phiên làm việc quan trọng.
+Đăng nhập Sealskin bằng tài khoản admin tích hợp, mở:
+https://sealskin.wardenmvp.duckdns.org:8443/api/warden-analytics
+
+### Có gì mới
+
+- Chọn 7/30/90 ngày hoặc tùy chọn tối đa 366 ngày.
+- Biểu đồ theo ngày: người dùng Free/VIP/chưa xác định và giờ chạy phiên.
+- Bộ lọc ứng dụng, gói lúc mở phiên; mặc định loại tài khoản admin.
+- Người dùng duy nhất trong kỳ, phiên mở, tổng giờ, thời lượng trung bình;
+  so với khoảng liền trước có cùng số ngày. Số 0 không chứng minh thu thập đủ.
+- Chia thời lượng phiên qua ngày theo múi giờ Việt Nam, cắt ở biên bộ lọc;
+  không ước lượng thời lượng cho phiên thiếu stop. Một người có thể xuất hiện
+  ở cả Free và VIP trong ngày nếu mở phiên trước và sau khi nâng cấp.
+- Ghi trường plan vào sự kiện launch mới qua audit hook (nhóm warden_free /
+  warden_vip). Phiên cũ không có plan hiện Chưa xác định, không phân loại ngược.
+  Gói là nhóm tại lúc mở phiên, không tách giữa phiên nếu gói thay đổi.
+- Chỉ đọc cơ sở dữ liệu billing thử nghiệm sẵn có; không tạo đơn và không
+  tính giao dịch is_test vào doanh thu. Website/GA4 và tiền thực chưa kết nối.
+- CSV chi tiết ngày theo các bộ lọc đang chọn. Tự đọc lại mỗi 60 giây khi trang mở.
+- Không theo dõi nội dung trong ứng dụng, URL duyệt web, bàn phím, mật khẩu.
+  Audit mở/đóng không đo được thời gian tương tác hay hành trình tính năng web.
+
+### Giới hạn và khôi phục
+
+Chỉ dữ liệu node hiện tại, tối đa 32 MiB nhật ký gần nhất, cảnh báo khi cắt.
+Phiên bị cắt mất launch/stop sẽ không được tính thời lượng. Nhóm khác hai nhóm
+chuẩn hiện Chưa xác định. Nên kiểm tra một phiên mới để xác nhận hook ghi plan
+trên phiên bản Sealskin thực tế. Installer sửa module trong container; khi
+recreate/update image cần cài lại. Không đổi chính sách đăng nhập hay phân quyền.
+
+```bash
+sudo bash install.sh sealskin rollback
+```
+
+Rollback gỡ route dashboard và restart container, loại bỏ hook trong tiến trình;
+không xóa nhật ký, không xóa dữ liệu billing. Kiểm thử cục bộ với xác thực mô phỏng:
+`python3 -m unittest discover -s . -p test_dashboard.py -v` và
+`node --test test_analytics.cjs`. Chưa kiểm chứng trên máy chủ người dùng.

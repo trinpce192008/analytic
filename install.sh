@@ -44,8 +44,14 @@ p=Path(app.__file__).parent
 f=p/'api.py'; original=f.read_text()
 module=(p/'warden_analytics.py').read_text(); ast.parse(module)
 marker='# BEGIN WARDEN ANALYTICS'
-addition='\n# BEGIN WARDEN ANALYTICS\nfrom .warden_analytics import router as _warden_analytics_router\napi_app.include_router(_warden_analytics_router)\n# END WARDEN ANALYTICS\n'
-if marker not in original:
+addition='\n# BEGIN WARDEN ANALYTICS\nfrom .warden_analytics import router as _warden_analytics_router, install_audit_hook as _warden_plan_hook\n_warden_plan_hook()\napi_app.include_router(_warden_analytics_router)\n# END WARDEN ANALYTICS\n'
+if marker in original:
+ end='# END WARDEN ANALYTICS'
+ a=original.index(marker); b=original.index(end,a)+len(end)
+ result=original[:a]+addition+original[b:]
+ ast.parse(result)
+ temp=f.with_suffix('.warden-tmp'); temp.write_text(result); os.replace(temp,f)
+else:
  backup=Path('/config/warden-analytics/backups'); backup.mkdir(parents=True,exist_ok=True)
  dest=backup/('api-'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%f')+'.py')
  dest.write_text(original)

@@ -143,3 +143,15 @@ không xóa nhật ký, không xóa dữ liệu billing. Kiểm thử cục bộ
 
 Cập nhật bằng lệnh cài như trên. 12 kiểm thử backend và tính toán cục bộ đã qua;
 chưa kiểm chứng đăng nhập / hiển thị trên máy chủ thực.
+
+## v0.4.0 — thời gian trong ngày
+
+Chọn một ngày trong khoảng đang lọc tại mục Thời gian trong ngày, nhập tên người
+ dùng nếu cần. Bảng hiển thị từng phiên: người dùng, gói lúc mở, ứng dụng, mã
+ phiên, ngày giờ mở / đóng, số phút thuộc ngày đã chọn và dòng thời gian 00–24h.
+Biểu đồ 24 cột cộng phút phiên theo giờ, phân màu Free/VIP/chưa xác định.
+Tổng có thể hơn 60 phút mỗi giờ nếu nhiều người hoặc ứng dụng chạy đồng thời;
+đây không phải số phút duy nhất của một người. Rê chuột lên cột xem số phút và
+người dùng duy nhất trong giờ. Thiếu mốc không được ước lượng thời lượng.
+Các phiên qua nửa đêm giữ nguyên ngày giờ gốc trong bảng nhưng cắt thời lượng
+và thanh thời gian theo ngày đã chọn. Bộ lọc tên chỉ tác động mục trong ngày.

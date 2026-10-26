@@ -48,6 +48,18 @@ class Tests(unittest.TestCase):
     audit.record('launch','u');self.assertEqual(captured[-1]['plan'],'vip')
     um.groups_of=lambda user:[]
     audit.record('launch','u');self.assertEqual(captured[-1]['plan'],'unknown')
+ def test_billing_readonly(self):
+    import sqlite3
+    with tempfile.TemporaryDirectory() as d:
+      path=Path(d,'billing.sqlite3')
+      self.assertNotIn('orders',mod.billing_summary(path))
+      self.assertFalse(path.exists())
+      c=sqlite3.connect(path)
+      c.executescript("CREATE TABLE orders(id,username,plan,status,created,confirmed,is_test); CREATE TABLE billing_events(at,action); INSERT INTO orders VALUES('d','u','demo','pending',1,NULL,1);")
+      c.commit();c.close()
+      before=path.read_bytes();r=mod.billing_summary(path)
+      self.assertEqual(r['orders'][0]['is_test'],1)
+      self.assertIsNone(r['real_revenue']);self.assertEqual(path.read_bytes(),before)
  def test_no_store(self):
     r=client.get('/api/warden-analytics/data',headers={'x-test-role':'root'})
     self.assertEqual(r.headers['cache-control'],'no-store')

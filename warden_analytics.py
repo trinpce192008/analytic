@@ -57,7 +57,7 @@ def install_audit_hook():
         if event == 'launch':
             try:
                 groups = set(um.groups_of(user))
-                fields['plan'] = 'vip' if 'warden_vip' in groups else 'free' if 'warden_free' in groups else 'unknown'
+                fields['plan'] = 'vip' if groups & {'warden_vip', 'VIP'} else 'free' if groups & {'warden_free', 'Free'} else 'unknown'
                 fields['plan_source'] = 'group_at_launch'
                 if um.get_effective_settings(user).get('admin'):
                     fields['admin'] = True
@@ -67,17 +67,20 @@ def install_audit_hook():
     record._warden_plan_hook = True
     audit.record = record
 
-def billing_summary():
-    """Read existing demo DB only; never create/modify it or report test revenue."""
+def billing_summary(path=None):
+    """Read billing analytics without changing any orders or inferring real revenue."""
     import sqlite3
-    path = Path('/config/warden-billing/billing.sqlite3')
+    path = Path(path or '/config/warden-billing/billing.sqlite3')
     if not path.is_file():
         return {'status': 'Chưa cài module thanh toán mô phỏng'}
     try:
         with sqlite3.connect(path.as_uri()+'?mode=ro', uri=True, timeout=2) as conn:
             conn.row_factory = sqlite3.Row
             orders = [dict(row) for row in conn.execute(
-                'SELECT confirmed FROM orders WHERE is_test=1 AND status=?', ('confirmed',))]
-        return {'status':'Chỉ dữ liệu thử nghiệm','orders':orders,'real_revenue':None}
+                'SELECT id,username,plan,status,created,confirmed,is_test FROM orders ORDER BY created')]
+            events = [dict(row) for row in conn.execute(
+                "SELECT at,action FROM billing_events WHERE action IN ('vip_activated','vip_expired','sync_failed') ORDER BY at")]
+        return {'status':'Đã kết nối module thanh toán mô phỏng','orders':orders,
+                'events':events,'real_revenue':None}
     except sqlite3.Error:
         return {'status':'Không đọc được nguồn thanh toán thử nghiệm'}

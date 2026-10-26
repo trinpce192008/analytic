@@ -124,3 +124,22 @@ Rollback gỡ route dashboard và restart container, loại bỏ hook trong ti�
 không xóa nhật ký, không xóa dữ liệu billing. Kiểm thử cục bộ với xác thực mô phỏng:
 `python3 -m unittest discover -s . -p test_dashboard.py -v` và
 `node --test test_analytics.cjs`. Chưa kiểm chứng trên máy chủ người dùng.
+
+## v0.3.0 — chi tiết ứng dụng / người dùng / thanh toán
+
+- Bỏ Điểm cần kiểm tra.
+- Bảng ngày × gói × ứng dụng: người dùng duy nhất, lượt mở, tổng phút,
+  phút trung bình của phiên đủ mốc trong ngày, số phiên thiếu stop.
+- Bảng người dùng × ngày × gói × ứng dụng để xem từng tài khoản đã dùng gì.
+- Thêm nhóm Free / VIP (đúng chữ hoa) bên cạnh warden_free / warden_vip.
+- Thanh toán thử nghiệm: đơn tạo / xác nhận theo ngày, theo gói mua, danh sách
+  đơn, số đơn hiện còn chờ, tỷ lệ xác nhận của cohort đơn tạo trong khoảng ngày.
+  Đơn xác nhận trong kỳ có thể được tạo trước kỳ; tỷ lệ cohort chỉ tính xác nhận
+  trước cuối kỳ. Trạng thái chờ là hiện tại, không phải ảnh chụp cuối kỳ.
+- Chỉ sử dụng đơn is_test=1. Không ghi / sửa DB billing. Không dùng giá gói hiện
+  tại để suy ra tiền đã thanh toán trong quá khứ. Doanh thu thực chưa kết nối.
+- Bộ lọc ngày và loại admin áp dụng thanh toán; lọc gói sử dụng / ứng dụng
+  không áp dụng vì chưa có quan hệ giao dịch–phiên. Gói mua được phân tích riêng.
+
+Cập nhật bằng lệnh cài như trên. 12 kiểm thử backend và tính toán cục bộ đã qua;
+chưa kiểm chứng đăng nhập / hiển thị trên máy chủ thực.

@@ -155,3 +155,32 @@ Tổng có thể hơn 60 phút mỗi giờ nếu nhiều người hoặc ứng d
 người dùng duy nhất trong giờ. Thiếu mốc không được ước lượng thời lượng.
 Các phiên qua nửa đêm giữ nguyên ngày giờ gốc trong bảng nhưng cắt thời lượng
 và thanh thời gian theo ngày đã chọn. Bộ lọc tên chỉ tác động mục trong ngày.
+
+## v0.5.0 — giao diện phục vụ kinh doanh và quản lý
+
+Thiết kế được tổ chức theo mục tiêu người xem, tổng quan trước và chi tiết sau:
+
+1. Tổng quan: KPI có ngữ cảnh kỳ trước, hai biểu đồ xu hướng và so sánh Free/VIP
+   (người có phiên, số phiên, giờ, phút/người, số ứng dụng/người).
+2. Ứng dụng & người dùng: xếp hạng theo tổng giờ, chi tiết từng người/ngày/gói,
+   giờ mở/đóng và timeline. Không khẳng định thời gian chạy là thời gian tương tác.
+3. Vận hành: bản đồ nhiệt ngày × giờ, đỉnh số phiên đủ mốc chạy đồng thời,
+   khung giờ có nhiều phút phiên nhất và độ đầy đủ mốc. Bấm ô nhiệt để chuyển
+   sang xem phiên của ngày đó. Không thay thế giám sát CPU/RAM/sức chứa/SLA.
+4. Thanh toán: giữ phân tích demo, cohort đơn tạo / ngày xác nhận, không lấy
+   đơn thử làm doanh thu; không suy ra chuyển đổi Free→trả phí từ nhóm hiện tại.
+5. Nguồn & cách tính: trạng thái kết nối, định nghĩa, câu hỏi quản lý và giới hạn.
+
+Không thêm lại chỉ số giữ chân hoặc panel Điểm cần kiểm tra. Chưa có nguồn tiền
+và chi phí thì doanh thu/lợi nhuận hiển thị Chưa kết nối, không hiển thị 0 giả.
+Bộ lọc gói/ứng dụng tắt ở mục thanh toán và nguồn để thể hiện phạm vi áp dụng;
+bộ lọc ngày và loại admin vẫn áp dụng. Tab điều hướng có thể dùng bàn phím.
+
+Tham khảo thiết kế: Microsoft Power BI dashboard design tips và Tableau dashboard
+best practices, truy cập 26/10/2026. Video TikTok được cung cấp không truy cập được
+trong phiên nghiên cứu; không coi nội dung video là nguồn đã xác minh.
+- https://learn.microsoft.com/en-us/power-bi/create-reports/service-dashboards-design-tips
+- https://help.tableau.com/current/pro/desktop/en-us/dashboards_best_practices.htm
+
+Kiểm thử mới: `node --test test_analytics.cjs`, `node test_ui.cjs` (DOM mô phỏng,
+không phải kiểm thử hiển thị bằng trình duyệt). Chưa cài trên máy chủ người dùng.

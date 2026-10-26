@@ -296,3 +296,24 @@ KPI có sparkline, phân tích theo các lát cắt, drill-through và tooltip �
 chép số liệu, không giả lập doanh thu/chi phí và không yêu cầu Power BI.
 Kiểm thử Node: sparkline, dữ liệu biểu đồ, drill theo ứng dụng/ngày và phục hồi
 bộ lọc trong DOM mô phỏng. Chưa kiểm thử trực quan hoặc cài trên máy chủ thực.
+
+
+## v0.9.1 — sửa độ dễ đọc theo ảnh phản hồi
+
+- Bỏ thanh 01 Tổng quan → 02 Phân tích theo nhóm → 03 Chi tiết. Giữ thao tác
+  mở chi tiết và nút quay lại để sử dụng mà không cần thanh hướng dẫn.
+- Hai biểu đồ ngày (người dùng, đơn VIP) hiển thị toàn chiều ngang, cao 360px;
+  viewBox cùng chiều cao hiển thị, nhãn trục/số trên cột 14px. Khoảng dài có
+  chiều rộng tối thiểu và cuộn ngang, tránh thu nhỏ cả chuỗi thành hình tí hon.
+- Trục người/đơn dùng vạch số nguyên; tự chọn đỉnh theo dữ liệu thay vì luôn
+  chia ít nhất 4 đơn vị khi giá trị lớn nhất chỉ là 1.
+- Bỏ mục, chú giải, cột bảng và CSV của nhóm thiếu thông tin gói. Chỉ các phiên
+  ghi rõ Free/VIP được đưa vào mọi phép tổng hợp sử dụng của dashboard; không
+  xóa nhật ký gốc, không gán ngược nhóm hiện tại hoặc mặc định lịch sử là Free.
+- Thay vùng xếp chồng theo giờ bằng cột nhóm: 00h–23h, Free xanh/VIP tím,
+  số phút hiện trên cột, tooltip tên nhóm và phút. Bảng số người/ứng dụng giữ
+  nguyên. Số phút là tổng thời lượng phiên, có thể >60 nếu dùng đồng thời.
+- Dữ liệu thanh toán/hạn mức không bị thay đổi bởi việc loại phiên thiếu gói.
+
+Kiểm tra: phép tính, DOM drill/return, loại phiên thiếu gói khỏi báo cáo và
+bộ chọn ứng dụng, kích thước SVG/số trên cột. Chưa xác minh trực quan trên máy chủ.

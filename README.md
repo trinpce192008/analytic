@@ -271,3 +271,28 @@ Datawrapper chart types guide (26/10/2026).
 
 Kiểm thử tính toán, SVG và DOM mô phỏng; chưa kiểm thử trực quan bằng trình duyệt
 hoặc trên máy chủ người dùng.
+
+
+## v0.9.0 — áp dụng video được tải lên: ba tầng thông tin
+
+Đã xem các khung hình và phụ đề của file snaptik.vn_7660519530476752148.mp4
+(2 phút 35 giây). Nội dung hướng dẫn thể hiện Overview → Breakdown → Deep dive;
+KPI có sparkline, phân tích theo các lát cắt, drill-through và tooltip để đi sâu.
+
+- Tầng 1: Tổng quan, bốn KPI chính có sparkline theo ngày trong khoảng lọc;
+  tổng người dùng và tổng giờ vẫn so với kỳ trước. Không thêm lại biểu đồ thời
+  gian theo ngày đã bị loại; sparkline chỉ là xu hướng nhỏ trong thẻ KPI.
+- Tầng 2: các tab ứng dụng, người dùng, thanh toán là các lát cắt nghiệp vụ.
+- Tầng 3: bấm tên ứng dụng trong xếp hạng để mở tab người dùng cùng kỳ và ứng
+  dụng đó; bấm cột người dùng theo ngày để mở chi tiết đúng ngày và nhóm gói.
+- Có chỉ báo ba tầng và ngữ cảnh đang phân tích, giữ ngày/gói/ứng dụng theo
+  lựa chọn; nút quay lại phục hồi báo cáo và toàn bộ bộ lọc trước khi đi sâu.
+- Biểu đồ thanh toán không bị gắn thao tác drill sang dữ liệu sử dụng không
+  liên quan. Biểu đồ người dùng có thể mở chi tiết bằng Enter/Space.
+- Giữ nguyên các loại biểu đồ ở v0.8 và các phần đã bỏ, không thêm lại chỉ số
+  giữ chân hay Điểm cần kiểm tra. Chưa có tiền thật thì vẫn chỉ phân tích demo.
+
+Áp dụng nguyên tắc cấu trúc thông tin của video cho dữ liệu Warden; không sao
+chép số liệu, không giả lập doanh thu/chi phí và không yêu cầu Power BI.
+Kiểm thử Node: sparkline, dữ liệu biểu đồ, drill theo ứng dụng/ngày và phục hồi
+bộ lọc trong DOM mô phỏng. Chưa kiểm thử trực quan hoặc cài trên máy chủ thực.

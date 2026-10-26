@@ -44,13 +44,13 @@ if(typeof module!=='undefined')Object.assign(module.exports,{audienceHours,userS
 const chartEsc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const chartNum=v=>Number(v).toLocaleString('vi-VN',{maximumFractionDigits:1});
 const chartEmpty=()=>'<p class="empty">Chưa có dữ liệu phù hợp để vẽ biểu đồ.</p>';
-function columnChart(data,series,unit='người'){
+function columnChart(data,series,unit='người',drill=false){
  if(!data.length)return chartEmpty();const width=Math.max(560,data.length*48),left=48,bottom=204,top=24,height=180;
  const raw=Math.max(0,...data.flatMap(d=>series.map(s=>s.get(d))));const step=Math.max(1,Math.ceil(raw/4)),max=step*4;
  const slot=(width-left-12)/data.length,bar=Math.min(18,slot*.72/Math.max(1,series.length));
  let svg=`<svg viewBox="0 0 ${width} 246" role="img" aria-label="Biểu đồ cột so sánh ${chartEsc(unit)} theo ngày"><text x="4" y="13" class="axis-label">${chartEsc(unit)}</text>`;
  for(let t=0;t<=4;t++){const y=bottom-height*t/4;svg+=`<line x1="${left}" x2="${width-12}" y1="${y}" y2="${y}" stroke="#e5ebf3"/><text x="${left-8}" y="${y+4}" text-anchor="end" class="axis-label">${chartNum(step*t)}</text>`}
- data.forEach((d,i)=>{const center=left+slot*(i+.5);series.forEach((s,j)=>{const value=s.get(d),x=center+(j-series.length/2)*bar,y=bottom-value/max*height;svg+=`<rect x="${x}" y="${y}" width="${Math.max(1,bar-1)}" height="${value/max*height}" fill="${s.color}" rx="2"><title>${chartEsc(d.day)} • ${chartEsc(s.label)}: ${chartNum(value)} ${chartEsc(unit)}</title></rect>`});if(i%Math.max(1,Math.ceil(data.length/12))===0||i===data.length-1)svg+=`<text x="${center}" y="224" text-anchor="middle" class="axis-label">${chartEsc(d.day.slice(8)+'/'+d.day.slice(5,7))}</text>`});
+ data.forEach((d,i)=>{const center=left+slot*(i+.5);series.forEach((s,j)=>{const value=s.get(d),x=center+(j-series.length/2)*bar,y=bottom-value/max*height;svg+=`<rect ${drill?`data-drill-day="${chartEsc(d.day)}" data-drill-plan="${chartEsc(s.group||'')}" tabindex="0" role="button" aria-label="Xem chi tiết ${chartEsc(d.day)} ${chartEsc(s.label)}"`:""} x="${x}" y="${y}" width="${Math.max(1,bar-1)}" height="${value/max*height}" fill="${s.color}" rx="2"><title>${chartEsc(d.day)} • ${chartEsc(s.label)}: ${chartNum(value)} ${chartEsc(unit)}</title></rect>`});if(i%Math.max(1,Math.ceil(data.length/12))===0||i===data.length-1)svg+=`<text x="${center}" y="224" text-anchor="middle" class="axis-label">${chartEsc(d.day.slice(8)+'/'+d.day.slice(5,7))}</text>`});
  return svg+'</svg>'+(raw===0?'<p class="muted">Không ghi nhận '+chartEsc(unit)+' trong khoảng ngày đã chọn.</p>':'');
 }
 function donutChart(parts,unit='giờ'){
@@ -70,32 +70,37 @@ function areaChart(hours){
 function statusComposition(orders){const map=new Map(),colors={confirmed:'#19a47a',pending:'#efac38',cancelled:'#df6678',other:'#8997ad'},names={confirmed:'Đã xác nhận',pending:'Đang chờ',cancelled:'Đã hủy',other:'Trạng thái khác'};for(const o of orders){const key=['confirmed','pending','cancelled'].includes(o.status)?o.status:'other';map.set(key,(map.get(key)||0)+1)}const total=orders.length;if(!total)return chartEmpty();return `<div class="status-stack" role="img" aria-label="Trạng thái hiện tại của ${total} đơn VIP tạo trong kỳ">${[...map].map(([k,v])=>`<span style="width:${v/total*100}%;background:${colors[k]}" title="${names[k]}: ${v} đơn (${chartNum(v/total*100)}%)"></span>`).join('')}</div><div class="status-legend">${[...map].map(([k,v])=>`<div><i style="background:${colors[k]}"></i>${names[k]}<b>${v} đơn · ${chartNum(v/total*100)}%</b></div>`).join('')}</div>`}
 if(typeof module!=='undefined')Object.assign(module.exports,{columnChart,donutChart,areaChart,statusComposition});
 
+function sparkline(values,label,color='#2468ed'){
+ if(!values.length)return '';const max=Math.max(1,...values),width=180,height=42,x=i=>4+i*172/Math.max(1,values.length-1),y=v=>38-v/max*30,points=values.map((v,i)=>`${x(i)},${y(v)}`).join(' ');
+ return `<svg class="sparkline" viewBox="0 0 ${width} ${height}" role="img" aria-label="Xu hướng ${chartEsc(label)} theo ngày"><title>${chartEsc(label)}: ${values.map(chartNum).join(' → ')}</title><polygon points="4,38 ${points} ${x(values.length-1)},38" fill="${color}" fill-opacity=".08"/><polyline points="${points}" fill="none" stroke="${color}" stroke-width="2"/><circle cx="${x(values.length-1)}" cy="${y(values.at(-1))}" r="2.5" fill="${color}"/></svg>`;
+}
+if(typeof module!=='undefined')Object.assign(module.exports,{sparkline});
 if(typeof document!=='undefined'){
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const n=v=>Number(v).toLocaleString('vi-VN',{maximumFractionDigits:1});
 const labels={free:'Free',vip:'VIP',unknown:'Chưa xác định'};
-let rows=[],payload={},result=null,busy=false,view='summary';
-function showView(name){view=name;for(const key of ['summary','apps','users','payments']){$('view-'+key).hidden=key!==name;if(key===name)$('nav-'+key).setAttribute('aria-current','page');else $('nav-'+key).removeAttribute('aria-current')}for(const a of document.querySelectorAll('aside [data-view]')){if(a.dataset.view===name)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')}$('plan').disabled=['payments','apps'].includes(name);$('app').disabled=name==='payments';if(result)scope()}
+let rows=[],payload={},result=null,busy=false,view='summary',returnContext=null;
+function showView(name){view=name;for(const key of ['summary','apps','users','payments']){$('view-'+key).hidden=key!==name;if(key===name)$('nav-'+key).setAttribute('aria-current','page');else $('nav-'+key).removeAttribute('aria-current')}for(const a of document.querySelectorAll('aside [data-view]')){if(a.dataset.view===name)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')}$('plan').disabled=['payments','apps'].includes(name);$('app').disabled=name==='payments';if(result)scope();updatePath()}
 function scope(){$('filter-scope').textContent=$('from').value+' → '+$('to').value+' • Giờ Việt Nam'+(view==='apps'?' • Luôn hiển thị cả Free và VIP.':'')+(view==='payments'?' • Thanh toán áp dụng khoảng ngày, không áp dụng bộ lọc ứng dụng / nhóm.':'')}
 const empty=cols=>'<tr><td colspan="'+cols+'" class="empty">Chưa có dữ liệu phù hợp.</td></tr>';
-const cards=(id,list)=>$(id).innerHTML=list.map(([l,v,d=''])=>`<section class="card"><small>${l}</small><div class="value">${v}</div><div class="kpi-note">${d}</div></section>`).join('');
+const cards=(id,list)=>$(id).innerHTML=list.map(([l,v,d='',trend=null,color='#2468ed'])=>`<section class="card"><small>${l}</small><div class="value">${v}</div><div class="kpi-note">${d}</div>${trend?sparkline(trend,l,color):''}</section>`).join('');
 const clock=h=>String(h).padStart(2,'0')+':00';
 const time=t=>Number.isFinite(t)?new Date(t).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh',hour12:false}):'—';
 function chart(days,series){const w=Math.max(550,days.length*24),h=185,max=Math.max(1,...days.flatMap(d=>series.map(s=>s.get(d))));let svg=`<svg viewBox="0 0 ${w} 235" role="img" aria-label="Biểu đồ theo ngày">`;for(let i=0;i<4;i++){const y=15+i*h/3;svg+=`<line x1="38" y1="${y}" x2="${w-10}" y2="${y}" stroke="#e4eaf3"/><text x="0" y="${y+4}" font-size="10" fill="#65748c">${n(max*(1-i/3))}</text>`}const x=i=>38+(w-58)*(i/Math.max(1,days.length-1));for(const s of series){const points=days.map((d,i)=>`${x(i)},${15+h*(1-s.get(d)/max)}`).join(' ');svg+=`<polyline fill="none" stroke="${s.color}" stroke-width="2.5" points="${points}"/>`;for(let i=0;i<days.length;i++)svg+=`<circle cx="${x(i)}" cy="${15+h*(1-s.get(days[i])/max)}" r="3" fill="${s.color}"><title>${days[i].day}: ${n(s.get(days[i]))} ${s.label}</title></circle>`}for(let i=0;i<days.length;i++)if(i%Math.max(1,Math.ceil(days.length/12))===0)svg+=`<text x="${x(i)}" y="224" text-anchor="middle" font-size="10" fill="#65748c">${days[i].day.slice(8)}/${days[i].day.slice(5,7)}</text>`;return svg+'</svg>'}
 
-function ranking(apps,from,to,opts){const groups={};for(const g of ['free','vip','unknown'])groups[g]=summarize(rows,from,to,{...opts,plan:g}).apps;const max=Math.max(1,...apps.map(a=>a.minutes));return apps.map(a=>{const parts=['free','vip','unknown'].filter(g=>!opts.plan||opts.plan==='all'||opts.plan===g).map(g=>({g,minutes:groups[g].find(x=>x.app===a.app)?.minutes||0}));return `<div class="rank-row"><span>${esc(a.app)}</span><div class="stack">${parts.map(x=>`<span class="${x.g}-bg" style="width:${x.minutes/max*100}%" title="${labels[x.g]}: ${n(x.minutes/60)} giờ"></span>`).join('')}</div><b>${n(a.minutes/60)} giờ</b></div>`}).join('')||'<p class="empty">Chưa có dữ liệu sử dụng.</p>'}
+function ranking(apps,from,to,opts){const groups={};for(const g of ['free','vip','unknown'])groups[g]=summarize(rows,from,to,{...opts,plan:g}).apps;const max=Math.max(1,...apps.map(a=>a.minutes));return apps.map(a=>{const parts=['free','vip','unknown'].filter(g=>!opts.plan||opts.plan==='all'||opts.plan===g).map(g=>({g,minutes:groups[g].find(x=>x.app===a.app)?.minutes||0}));return `<div class="rank-row"><button class="drill-link" data-drill-app="${esc(a.app)}" title="Xem chi tiết ${esc(a.app)}">${esc(a.app)} ↗</button><div class="stack">${parts.map(x=>`<span class="${x.g}-bg" style="width:${x.minutes/max*100}%" title="${labels[x.g]}: ${n(x.minutes/60)} giờ"></span>`).join('')}</div><b>${n(a.minutes/60)} giờ</b></div>`}).join('')||'<p class="empty">Chưa có dữ liệu sử dụng.</p>'}
 function render(){const from=$('from').value,to=$('to').value;if(!from||!to||from>to||start(to)-start(from)>365*DAY){$('status').textContent='Chọn khoảng hợp lệ tối đa 366 ngày.';result=null;$('export').disabled=true;return}
- const opts={exclude:true,plan:$('plan').value,app:$('app').value};result=summarize(rows,from,to,opts);$('export').disabled=false;scope();
+ const opts={exclude:true,plan:$('plan').value,app:$('app').value};result=summarize(rows,from,to,opts);$('export').disabled=false;scope();updatePath();
  const span=start(to)-start(from)+DAY,previous=summarize(rows,date(start(from)-span),date(start(from)-DAY),opts);const delta=(v,p)=>p?n((v/p-1)*100)+'% so với kỳ trước':'Kỳ trước chưa có dữ liệu so sánh';
  const groups={};for(const g of ['free','vip','unknown'])groups[g]=summarize(rows,from,to,{...opts,plan:g});
  const allowed=g=>opts.plan==='all'||opts.plan===g;
  cards('metrics',[
- ['Người sử dụng trong kỳ',result.users.size,delta(result.users.size,previous.users.size)],
- ['Người sử dụng Free',allowed('free')?groups.free.users.size:'—','Đếm người duy nhất trong kỳ'],
- ['Người sử dụng VIP',allowed('vip')?groups.vip.users.size:'—','Đếm người duy nhất trong kỳ'],
- ['Tổng thời gian sử dụng',n(result.minutes/60)+' giờ',delta(result.minutes,previous.minutes)]
+ ['Người sử dụng trong kỳ',result.users.size,delta(result.users.size,previous.users.size),result.daily.map(d=>d.users.size)],
+ ['Người sử dụng Free',allowed('free')?groups.free.users.size:'—','Đếm người duy nhất trong kỳ',allowed('free')?groups.free.daily.map(d=>d.users.size):null],
+ ['Người sử dụng VIP',allowed('vip')?groups.vip.users.size:'—','Đếm người duy nhất trong kỳ',allowed('vip')?groups.vip.daily.map(d=>d.users.size):null,'#9257e8'],
+ ['Tổng thời gian sử dụng',n(result.minutes/60)+' giờ',delta(result.minutes,previous.minutes),result.daily.map(d=>d.minutes/60)]
  ]);
  const usageMinutes=result.minutes, vipMinutes=allowed('vip')?groups.vip.minutes:0;
  cards('engagement-metrics',[
@@ -103,7 +108,7 @@ function render(){const from=$('from').value,to=$('to').value;if(!from||!to||fro
  ['Người sử dụng trung bình / ngày',n(result.daily.reduce((sum,d)=>sum+d.users.size,0)/result.daily.length),'Tính cả ngày không ghi nhận sử dụng'],
  ['Tỷ trọng thời gian của VIP',usageMinutes?n(vipMinutes/usageMinutes*100)+'%':'—','Giờ VIP / tổng giờ theo bộ lọc, gồm nhóm chưa xác định']
  ]);
- $('users-chart').innerHTML=columnChart(result.daily,['free','vip','unknown'].filter(allowed).map((g,i)=>({color:{free:'#2468ed',vip:'#9257e8',unknown:'#8997ad'}[g],label:labels[g]+' • người',get:d=>d[g].size})));
+ $('users-chart').innerHTML=columnChart(result.daily,['free','vip','unknown'].filter(allowed).map((g,i)=>({color:{free:'#2468ed',vip:'#9257e8',unknown:'#8997ad'}[g],label:labels[g]+' • người',group:g,get:d=>d[g].size})),'người',true);
  $('daily').innerHTML=result.daily.map(d=>`<tr><td>${d.day}</td><td>${d.free.size}</td><td>${d.vip.size}</td><td>${d.unknown.size}</td><td>${d.users.size}</td><td>${d.launches}</td><td>${n(d.minutes/60)}</td></tr>`).join('');
  $('group-comparison').innerHTML=['free','vip','unknown'].filter(allowed).map(g=>{const x=groups[g];return `<tr><td><span class="pill ${g}">${labels[g]}</span></td><td>${x.users.size}</td><td>${x.launches}</td><td>${n(x.minutes/60)}</td><td>${x.users.size?n(x.minutes/60/x.users.size):'—'}</td><td>${x.users.size?n(x.apps.reduce((a,b)=>a+b.users.size,0)/x.users.size):'—'}</td></tr>`}).join('');
  // Application analysis always shows both plans, independent of the group selector.
@@ -125,7 +130,7 @@ function render(){const from=$('from').value,to=$('to').value;if(!from||!to||fro
  $('hourly').innerHTML=areaChart(intra.hours);
  $('hour-details').innerHTML=intra.hours.map(h=>`<tr><td>${clock(h.hour)}–${clock(h.hour+1)}</td><td>${h.users.size}</td><td>${h.freeUsers.size}</td><td>${h.vipUsers.size}</td><td>${n(h.free+h.vip+h.unknown)}</td><td>${esc([...h.apps].join(', '))||'—'}</td></tr>`).join('');
  $('intraday-sessions').innerHTML=intra.details.map(r=>{const valid=r.minutes!==null,offset=valid?(r.from-start(focus))/DAY*100:0,width=valid?(r.to-r.from)/DAY*100:0;return `<tr><td>${esc(r.user)}</td><td>${labels[r.plan]}</td><td>${esc(r.app)}</td><td>${time(r.start)}</td><td>${time(r.end)}</td><td>${valid?n(r.minutes):'—'}</td><td><div class="timeline">${valid?`<div class="${r.plan}-bg" style="left:${offset}%;width:${Math.max(.2,width)}%"></div>`:''}</div></td></tr>`}).join('')||empty(7);
- renderPayments(from,to);
+ renderPayments(from,to);updatePath();
 }
 function renderQuota(){const q=payload.vip_quota||{},users=q.users||[];const known=users.filter(u=>Number.isFinite(u.used_hours)&&Number.isFinite(u.limit_hours)&&u.limit_hours>=0&&u.period==='month');
  $('quota-period').textContent=q.month?'Tháng '+q.month+' • Bộ đếm hạn mức Sealskin (UTC)':'Chưa đọc được bộ đếm hạn mức Sealskin.';
@@ -140,11 +145,21 @@ function renderPayments(from,to){const billing=payload.billing||{};$('billing').
  $('payment-plans').innerHTML=[...new Set([...p.cohort,...p.confirmed].map(o=>o.plan))].map(g=>`<tr><td>${esc(g)}</td><td>${p.cohort.filter(o=>o.plan===g).length}</td><td>${p.confirmed.filter(o=>o.plan===g).length}</td></tr>`).join('')||empty(3);
  $('payment-orders').innerHTML=[...new Map([...p.cohort,...p.confirmed].map(o=>[o.id,o])).values()].sort((a,b)=>b.created-a.created).map(o=>`<tr><td>${esc(o.username)}</td><td>${esc(o.plan)}</td><td>${esc({confirmed:'Đã xác nhận',pending:'Chờ xác nhận',cancelled:'Đã hủy'}[o.status]||o.status)}</td><td>${time(o.created*1000)}</td><td>${o.confirmed?time(o.confirmed*1000):'—'}</td></tr>`).join('')||empty(5);
 }
+function updatePath(){const stage=returnContext?'deep':view==='summary'?'overview':'breakdown';for(const key of ['overview','breakdown','deep']){$('path-'+key).className=key===stage?'step active':'step';if(key===stage)$('path-'+key).setAttribute('aria-current','step');else $('path-'+key).removeAttribute('aria-current')}$('deep-context').hidden=!returnContext;if(returnContext)$('deep-caption').textContent=($('app').value||'Tất cả ứng dụng')+' • '+($('plan').value==='all'?'Tất cả nhóm':labels[$('plan').value])+' • '+$('from').value+' → '+$('to').value+' • Ngày chi tiết '+$('focus-day').value;}
+function goDeep(app='',day='',group=''){
+ returnContext ||= {view,values:Object.fromEntries(['from','to','range','plan','app','focus-day'].map(id=>[id,$(id).value]))};
+ if(app)$('app').value=app;
+ if(group)$('plan').value=group;else if(view==='apps')$('plan').value='all';
+ if(day)$('focus-day').value=day;
+ showView('users');render();$('intraday').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function backFromDeep(){if(!returnContext)return;const previous=returnContext;returnContext=null;for(const [id,value] of Object.entries(previous.values))$(id).value=value;showView(previous.view);render();}
+function drillClick(e){const app=e.target.closest('[data-drill-app]');if(app){goDeep(app.getAttribute('data-drill-app'));return}const day=e.target.closest('[data-drill-day]');if(day)goDeep('',day.getAttribute('data-drill-day'),day.getAttribute('data-drill-plan'));}
 function range(){const end=date(new Date());$('to').value=end;$('from').value=date(start(end)-(+$('range').value-1)*DAY);render()}
 async function refresh(){if(busy)return;busy=true;$('refresh').disabled=true;try{const r=await fetch('/api/warden-analytics/data',{credentials:'same-origin',cache:'no-store'});if(!r.ok)throw Error(r.status===403?'Chỉ tài khoản quản trị được truy cập.':r.status===401?'Hết phiên đăng nhập. Về Trang chủ để đăng nhập.':'Không đọc được dữ liệu: HTTP '+r.status);payload=await r.json();const admins=new Set(payload.admin_users||[]);rows=sessions(payload.events||[]).filter(r=>!r.admin&&!admins.has(r.user));if(payload.billing?.orders)payload.billing.orders=payload.billing.orders.filter(o=>!admins.has(o.username));const current=$('app').value;const names=[...new Set(rows.map(r=>r.app))].sort();$('app').innerHTML='<option value="">Tất cả ứng dụng</option>'+names.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('');$('app').value=names.includes(current)?current:'';$('status').textContent=payload.limited?'Dữ liệu chỉ được đọc một phần; các tổng có thể chưa đầy đủ.':'';$('status').className=payload.limited?'error':'';$('updated').textContent='Cập nhật '+time(Date.parse(payload.fetched_at));render()}catch(e){rows=[];payload={};render();$('status').textContent=e.message;$('status').className='error';$('updated').textContent='Không đọc được dữ liệu'}finally{busy=false;$('refresh').disabled=false}}
-for(const key of ['summary','apps','users','payments'])$('nav-'+key).onclick=()=>showView(key);
-for(const a of document.querySelectorAll('aside [data-view]'))a.onclick=e=>{e.preventDefault();showView(a.dataset.view)};
-$('drill-apps').onclick=()=>showView('apps');$('quota-risk').addEventListener('change',renderQuota);
+for(const key of ['summary','apps','users','payments'])$('nav-'+key).onclick=()=>{returnContext=null;showView(key)};
+for(const a of document.querySelectorAll('aside [data-view]'))a.onclick=e=>{e.preventDefault();returnContext=null;showView(a.dataset.view)};
+$('drill-apps').onclick=()=>{returnContext=null;showView('apps')};$('deep-back').onclick=backFromDeep;for(const id of ['app-ranking','overview-ranking','users-chart']){$(id).onclick=drillClick;$(id).addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();drillClick(e)}})};$('quota-risk').addEventListener('change',renderQuota);
 for(const id of ['from','to','plan','app','focus-day'])$(id).addEventListener('change',render);$('range').onchange=range;$('refresh').onclick=refresh;
 $('export').onclick=()=>{if(!result)return;const csv=[['day_vn','free_users','vip_users','unknown_users','unique_users','launches','hours'],...result.daily.map(d=>[d.day,d.free.size,d.vip.size,d.unknown.size,d.users.size,d.launches,d.minutes/60])].map(r=>r.join(',')).join('\r\n');const u=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=u;a.download='warden-daily.csv';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};range();refresh();setInterval(()=>{if(!document.hidden)refresh()},60000);
 }

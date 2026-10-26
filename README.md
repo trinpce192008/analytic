@@ -218,3 +218,24 @@ Dashboard tập trung vào 4 mục: Tổng quan, Ứng dụng, Người dùng v�
 
 Cài đặt và rollback dùng lệnh như trên. Bộ cài tự tìm thư mục app Python, không
 cần sửa UI_PATH hay chép vào thư mục ui. Chưa cài trực tiếp trên máy chủ người dùng.
+
+
+## v0.7.0 — rút gọn theo quyết định quản lý
+
+- Đổi tên biểu đồ: Số lượng người dùng theo ngày, giữ Free/VIP/chưa xác định.
+- Bỏ biểu đồ thời gian theo ngày, heatmap ngày–giờ, bảng hiệu quả ứng dụng,
+  bảng chi tiết ứng dụng từng ngày và bảng người dùng × ngày × ứng dụng.
+- Giữ tổng giờ mỗi ứng dụng phân Free/VIP, bảng người dùng từng nhóm, giờ mở/đóng
+  trong ngày và bảng số người/ứng dụng/thời lượng theo giờ.
+- Bổ sung 3 chỉ số ngắn gọn: phút sử dụng/người duy nhất trong kỳ, số người
+  sử dụng trung bình/ngày (bao gồm ngày trống), tỷ trọng giờ VIP trong tổng giờ
+  đang lọc (bao gồm nhóm chưa xác định). Không suy ra doanh thu hay chuyển đổi.
+- Bảng VIP sắp theo mức tiêu thụ hạn mức giảm dần; có nút lọc chỉ VIP gần hết
+  (>=80%) hoặc hết hạn mức tháng. Hạn mức 0 vẫn được xem là đã hết.
+- Đổi 2 KPI thanh toán thành Số lượng đơn VIP tạo trong kỳ và Số lượng đơn VIP
+  đã xác nhận trong kỳ; giữ phân biệt ngày tạo/ngày xác nhận, không gộp hai chỉ số.
+  Module thanh toán hiện chỉ bán các gói VIP thử nghiệm demo_5m/vip_30d.
+- Không đổi backend, quyền truy cập, dữ liệu hoặc cơ chế tính hạn mức.
+
+Kiểm tra: Node test tính toán, DOM mô phỏng và Python test backend. Chưa kiểm tra
+trực quan bằng trình duyệt hoặc cài trực tiếp trên máy chủ người dùng.

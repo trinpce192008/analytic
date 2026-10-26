@@ -239,3 +239,35 @@ cần sửa UI_PATH hay chép vào thư mục ui. Chưa cài trực tiếp trên
 
 Kiểm tra: Node test tính toán, DOM mô phỏng và Python test backend. Chưa kiểm tra
 trực quan bằng trình duyệt hoặc cài trực tiếp trên máy chủ người dùng.
+
+
+## v0.8.0 — biểu đồ đa dạng theo mục tiêu phân tích
+
+- Cột nhóm: số người Free/VIP/chưa xác định theo ngày (không xếp chồng người
+  vì một tài khoản có thể đổi gói trong ngày); trục số người có vạch nguyên.
+- Thanh ngang xếp chồng: tổng thời lượng từng ứng dụng, phân Free/VIP.
+- Doughnut: tỷ trọng giờ theo ứng dụng, tối đa 4 ứng dụng và nhóm còn lại.
+  Legend giữ số giờ và phần trăm; dữ liệu trống không tạo tỷ trọng giả.
+- Thanh ngang: top 5 ứng dụng theo lượt mở trong khoảng đã chọn, độc lập
+  với tổng thời lượng để phân biệt mức phổ biến và số giờ tiêu thụ.
+- Vùng bậc xếp chồng: phút sử dụng theo 24 giờ trong ngày chọn; mỗi bậc giữ
+  đúng một giờ, không nội suy thành hoạt động liên tục giữa các giờ.
+- Cột nhóm thanh toán: số đơn VIP tạo / xác nhận mỗi ngày, có thể thuộc các
+  đơn khác nhau nên không vẽ thành phễu chuyển đổi.
+- Thanh tỷ trọng 100%: trạng thái hiện tại của cùng nhóm đơn VIP tạo trong kỳ,
+  bao gồm mọi trạng thái (đã xác nhận, chờ, hủy, khác); nhãn rõ khác với tỷ lệ
+  xác nhận trước cuối kỳ đang hiển thị trên KPI.
+- Giữ thanh tiến độ hạn mức VIP và dòng thời gian mở/đóng người dùng.
+- Không thêm lại các phần đã bỏ ở v0.7.0; không sửa backend hoặc dữ liệu.
+
+SVG nội bộ cùng origin, không dùng CDN và không gửi dữ liệu cho bên thứ ba.
+Đã kiểm tra ba ảnh người dùng gửi (tỷ trọng thời lượng / xếp hạng / vùng).
+Link TikTok 7660519530476752148 vẫn không truy cập được ngày 26/10/2026,
+không khẳng định thiết kế đã đối chiếu với nội dung video.
+Tham khảo cách chọn biểu đồ: Microsoft Learn visualization types và
+Datawrapper chart types guide (26/10/2026).
+- https://learn.microsoft.com/en-us/power-bi/visuals/power-bi-visualization-types-for-reports-and-q-and-a
+- https://www.datawrapper.de/blog/chart-types-guide
+
+Kiểm thử tính toán, SVG và DOM mô phỏng; chưa kiểm thử trực quan bằng trình duyệt
+hoặc trên máy chủ người dùng.

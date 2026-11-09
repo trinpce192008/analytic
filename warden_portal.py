@@ -89,12 +89,11 @@ def timestamp():
 
 @router.get("/nav")
 def navigation(request: Request, user=Depends(verify_token)):
+    # OpenAPI resolves included routers even when app.routes is not flat.
+    billing_status = request.app.openapi()["paths"].get("/api/warden-billing/me", {})
     return response({
         "analytics": can_manage_analytics(user) or shared_analytics_enabled(),
-        "upgrade": any(
-            getattr(route, "path", None) == "/api/warden-billing/me"
-            for route in request.app.routes
-        ),
+        "upgrade": "get" in billing_status,
     })
 
 

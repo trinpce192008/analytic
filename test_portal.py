@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 
 from test_dashboard import mod, warden_portal
@@ -25,10 +25,13 @@ class PortalTests(unittest.TestCase):
         app.include_router(warden_portal.router)
         app.include_router(mod.router)
 
-        @app.get("/api/warden-billing/me")
+        billing_router = APIRouter(prefix="/api/warden-billing")
+
+        @billing_router.get("/me")
         def billing():
             return {}
 
+        app.include_router(billing_router)
         self.client = TestClient(app)
         self.addCleanup(self.client.close)
 
@@ -37,6 +40,17 @@ class PortalTests(unittest.TestCase):
         if who:
             headers["x-test-role"] = who
         return self.client.request(method, BASE + path, json=body, headers=headers)
+
+    def test_upgrade_navigation_follows_installed_billing_route(self):
+        for role in ("root", "lecturer"):
+            self.assertTrue(self.call("GET", "/nav", role).json()["upgrade"])
+
+        app = FastAPI()
+        app.include_router(warden_portal.router)
+        with TestClient(app) as client:
+            nav = client.get(BASE + "/nav", headers={"x-test-role": "root"})
+            self.assertEqual(nav.status_code, 200)
+            self.assertFalse(nav.json()["upgrade"])
 
     def test_shared_dashboard_is_read_only_and_revocable(self):
         root = {"x-test-role": "root"}
@@ -48,7 +62,6 @@ class PortalTests(unittest.TestCase):
             db.execute("INSERT INTO preferences VALUES ('user_dashboard', 1)")
         nav = self.call("GET", "/nav", "lecturer").json()
         self.assertFalse(nav["analytics"])
-        self.assertTrue(nav["upgrade"])
         for path in paths:
             self.assertEqual(self.client.get(path, headers=viewer).status_code, 403)
         update = {"shared_analytics": True}

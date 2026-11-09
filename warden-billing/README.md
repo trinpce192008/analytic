@@ -56,7 +56,7 @@ Module là trang riêng trên cùng Sealskin, chưa thêm tab vào sidebar gốc
 4. Trang người dùng tự đọc lại mỗi 10 giây; hiển thị VIP và ngày hết hạn.
 5. Sau 5 phút, tác vụ trên máy chủ (15 giây/lần) thay VIP về Free. Không cần mở trang để tác vụ chạy.
 
-Có thêm gói VIP 30 ngày, giá minh họa 49.000 đ (chưa phải giá bán được người dùng xác nhận). Gói 5 phút giá 0 đ. Chỉnh cấu hình PLANS trong warden_billing.py trước khi cài nếu cần.
+Có thêm gói VIP 30 ngày, giá mô phỏng 429.000 đ. Gói 5 phút giá 0 đ. Chỉnh cấu hình PLANS trong warden_billing.py trước khi cài nếu cần.
 
 ## Quy tắc
 

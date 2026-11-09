@@ -14,7 +14,7 @@ log=logging.getLogger(__name__)
 BASE=Path(__file__).parent
 ROOT=Path('/config/warden-billing')
 FREE='warden_free'; VIP='warden_vip'
-PLANS={'demo_5m':{'label':'VIP thử nghiệm · 5 phút','seconds':300,'amount':0},'vip_30d':{'label':'VIP thử nghiệm · 30 ngày','seconds':2592000,'amount':49000}}
+PLANS={'demo_5m':{'label':'VIP thử nghiệm · 5 phút','seconds':300,'amount':0},'vip_30d':{'label':'VIP thử nghiệm · 30 ngày','seconds':2592000,'amount':429000}}
 router=APIRouter(prefix='/api/warden-billing')
 HEAD={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"}
 def db():
@@ -117,7 +117,50 @@ async def me(user=Depends(signed)):
     with connection() as c:
         sub=c.execute('SELECT * FROM subscriptions WHERE username=?',(name,)).fetchone()
         orders=c.execute('SELECT * FROM orders WHERE username=? ORDER BY created DESC LIMIT 50',(name,)).fetchall()
-    return {'username':name,'admin':name=='admin' and bool(user.get('is_admin')),'plans':PLANS,'subscription':dict(sub) if sub else None,'orders':[dict(o) for o in orders],'is_test':True}
+        subscription = None
+        if sub:
+            confirmed = c.execute(
+                """SELECT plan FROM orders WHERE username=? AND status='confirmed'
+                   ORDER BY confirmed DESC, created DESC, id DESC LIMIT 1""",
+                (name,),
+            ).fetchone()
+            # Older payment pages only recognize the original revocation states.
+            state = {'pending_cancel': 'pending_revoke', 'cancelled': 'expired'}.get(sub['state'], sub['state'])
+            subscription = dict(sub, state=state, plan=confirmed['plan'] if confirmed else None)
+    return {'username':name,'admin':name=='admin' and bool(user.get('is_admin')),'plans':PLANS,'subscription':subscription,'orders':[dict(o) for o in orders],'is_test':True}
+
+
+@router.post('/cancel')
+async def cancel_own_subscription(user=Depends(write_guard)):
+    name = user['username']
+    try:
+        ensure_groups()
+        account(name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    with connection() as c:
+        c.execute('BEGIN IMMEDIATE')
+        subscription = c.execute(
+            """UPDATE subscriptions SET expires=?, state='pending_cancel', error=''
+               WHERE username=? AND state IN ('active', 'pending_grant', 'pending_revoke')""",
+            (time.time(), name),
+        )
+        orders = c.execute(
+            "UPDATE orders SET status='cancelled' WHERE username=? AND status='pending'",
+            (name,),
+        )
+        if subscription.rowcount or orders.rowcount:
+            event(c, name, 'subscription_cancel_requested')
+
+    reconcile(name)
+    with connection() as c:
+        current = c.execute('SELECT state FROM subscriptions WHERE username=?', (name,)).fetchone()
+    if current and current['state'] == 'pending_cancel':
+        raise HTTPException(409, 'Đang thu hồi VIP. Hãy chờ đồng bộ trước khi đăng ký gói khác.')
+    return {'status': 'cancelled'}
+
+
 @router.post('/orders')
 async def create(req:Request,user=Depends(write_guard)):
     try:
@@ -125,6 +168,11 @@ async def create(req:Request,user=Depends(write_guard)):
         if p not in PLANS: raise ValueError('Gói không hợp lệ.')
         with connection() as c:
             c.execute('BEGIN IMMEDIATE')
+            if c.execute(
+                "SELECT 1 FROM subscriptions WHERE username=? AND state IN ('pending_cancel', 'pending_revoke')",
+                (user['username'],),
+            ).fetchone():
+                raise HTTPException(409, 'Đang thu hồi VIP. Hãy chờ đồng bộ trước khi đăng ký gói khác.')
             existing=c.execute("SELECT id FROM orders WHERE username=? AND status='pending'",(user['username'],)).fetchone()
             if existing:return {'id':existing['id'],'existing':True}
             oid='DEMO-'+uuid.uuid4().hex[:16].upper()

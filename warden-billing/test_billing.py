@@ -114,4 +114,38 @@ class TestBilling(unittest.TestCase):
   self.assertNotIn('data-user=',page)
   for suffix,file in (('', 'warden_billing.html'),('/app.js','warden_billing.js')):
    self.assertEqual(client.get('/api/warden-billing'+suffix).content,(base/file).read_bytes())
+
+ def test_self_cancel_is_account_scoped_and_preserves_confirmed_orders(self):
+  url='/api/warden-billing'
+  confirmed=self.order()
+  self.confirm(confirmed)
+  pending=self.order()
+  self.assertEqual(client.post(url+'/cancel',json={}).status_code,401)
+  self.assertEqual(client.post(url+'/cancel',headers={'test-user':'student'},json={}).status_code,403)
+  self.assertEqual(client.post(url+'/cancel',headers=headers('admin'),json={}).status_code,400)
+  before=client.get(url+'/me',headers=headers()).json()
+  self.assertEqual(before['subscription']['plan'],'demo_5m')
+  self.assertEqual(before['plans']['vip_30d']['amount'],429000)
+  self.assertEqual(client.post(url+'/cancel',headers=headers(),json={'username':'admin'}).json(),{'status':'cancelled'})
+  after=client.get(url+'/me',headers=headers()).json()
+  self.assertEqual(after['subscription']['state'],'expired')
+  self.assertEqual({order['id']:order['status'] for order in after['orders']},
+                   {confirmed:'confirmed',pending:'cancelled'})
+  self.assertEqual(records['student']['settings']['groups'],['study','warden_free'])
+  self.assertNotEqual(self.order(),pending)
+
+ def test_self_cancel_blocks_new_orders_until_free_is_applied(self):
+  self.confirm(self.order())
+  url='/api/warden-billing'
+  original=u.update_user_settings
+  def fail(*args):raise ValueError('simulated failure')
+  u.update_user_settings=fail
+  try:
+   self.assertEqual(client.post(url+'/cancel',headers=headers(),json={}).status_code,409)
+   self.assertEqual(client.get(url+'/me',headers=headers()).json()['subscription']['state'],'pending_revoke')
+   self.assertEqual(client.post(url+'/orders',headers=headers(),json={'plan':'demo_5m'}).status_code,409)
+  finally:u.update_user_settings=original
+  b.reconcile()
+  self.assertEqual(client.get(url+'/me',headers=headers()).json()['subscription']['state'],'expired')
+  self.order()
 if __name__=='__main__':unittest.main()

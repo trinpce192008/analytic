@@ -32,7 +32,19 @@ for n in ('warden_free','warden_vip'):
  assert not g.get('settings',{}).get('admin'), 'Disable Administrator on '+n
 print('Preflight OK')
 PY
-for f in warden_billing.py warden_billing.html warden_billing.js; do
+for f in warden_billing.html warden_billing.js; do
+ if ! docker exec "$container" test -e "$appdir/$f"; then
+  test -s "$f"
+  docker cp "$f" "$container:$appdir/$f"
+ fi
+done
+# Revert only the exact stock script from the release that added cancellation to Billing.
+previous_sidebar_release_js="c98285301abd8b69fa46328436c9e731c41b9f1f579c739e2bb462915bbdc77a"
+installed_js="$(docker exec "$container" python3 -c 'import hashlib, sys; from pathlib import Path; print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())' "$appdir/warden_billing.js")"
+if [[ "$installed_js" == "$previous_sidebar_release_js" ]]; then
+ docker cp warden_billing.js "$container:$appdir/warden_billing.js"
+fi
+for f in warden_billing.py warden_admin_subscriptions.js; do
  test -s "$f"
  docker cp "$f" "$container:$appdir/$f"
 done

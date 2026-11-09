@@ -100,4 +100,18 @@ class TestBilling(unittest.TestCase):
   b.reconcile()
   self.assertEqual(self.subscription()['state'],'cancelled')
   self.assertEqual(records['student']['settings']['groups'],['study','warden_free'])
+ def test_subscription_management_is_separate_and_admin_only(self):
+  self.confirm(self.order())
+  url='/api/warden-billing/admin/subscriptions'
+  for path in (url,url+'.js'):
+   self.assertEqual(client.get(path).status_code,401)
+   self.assertEqual(client.get(path,headers=headers()).status_code,403)
+   self.assertEqual(client.get(path,headers=headers('admin')).status_code,200)
+  self.assertIn('Hủy gói VIP',client.get(url,headers=headers('admin')).text)
+  self.cancel(self.subscription()['expires'])
+  page=client.get(url,headers=headers('admin')).text
+  self.assertIn('Đã hủy · Free',page)
+  self.assertNotIn('data-user=',page)
+  for suffix,file in (('', 'warden_billing.html'),('/app.js','warden_billing.js')):
+   self.assertEqual(client.get('/api/warden-billing'+suffix).content,(base/file).read_bytes())
 if __name__=='__main__':unittest.main()

@@ -2,6 +2,8 @@
 import asyncio, contextlib, json, logging, os, sqlite3, time, uuid
 from pathlib import Path
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
+from html import escape
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
@@ -143,6 +145,77 @@ async def admin_data(user=Depends(root)):
 class CancelSubscription(BaseModel):
     username: str
     expires: float
+
+
+@router.get('/admin/subscriptions', response_class=HTMLResponse)
+async def subscriptions_page(user=Depends(root)):
+    now = time.time()
+    with connection() as c:
+        subscriptions = c.execute(
+            """SELECT username, expires, state FROM subscriptions
+               WHERE (expires > ? AND state IN ('active', 'pending_grant'))
+                  OR state IN ('pending_cancel', 'cancelled')
+               ORDER BY username""",
+            (now,),
+        ).fetchall()
+
+    vietnam = timezone(timedelta(hours=7))
+    rows = []
+    for subscription in subscriptions:
+        username = escape(subscription['username'])
+        expires = subscription['expires']
+        state = subscription['state']
+        date = datetime.fromtimestamp(expires, vietnam).strftime('%H:%M %d/%m/%Y')
+        if state == 'pending_cancel':
+            status = 'Đang chờ thu hồi VIP'
+        elif state == 'cancelled':
+            status = 'Đã hủy · Free'
+        else:
+            status = 'VIP đang hoạt động' if state == 'active' else 'Đang chờ cấp VIP'
+        button = ''
+        if state in ('active', 'pending_grant') and expires > now:
+            button = (
+                f'<button type="button" data-user="{username}" data-expires="{expires}">'
+                'Hủy gói VIP</button>'
+            )
+        rows.append(f'<tr><td>{username}</td><td>{status}</td><td>{date}</td><td>{button}</td></tr>')
+    table = ''.join(rows) or '<tr><td colspan="4">Chưa có gói VIP để quản lý.</td></tr>'
+    return HTMLResponse(f"""<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quản lý gói VIP · Warden</title>
+<style>
+body {{ font: 16px system-ui, sans-serif; max-width: 60rem; padding: 1rem; margin: 1rem auto; }}
+.table {{ overflow: auto; }}
+table {{ border-collapse: collapse; width: 100%; }}
+th, td {{ padding: .7rem; border-bottom: 1px solid #ddd; text-align: left; }}
+button {{ font: inherit; padding: .45rem .7rem; }}
+</style>
+<script src="/api/warden-billing/admin/subscriptions.js" defer></script>
+</head>
+<body>
+<main>
+<a href="/api/warden-billing">Về trang thanh toán</a>
+<h1>Quản lý gói VIP</h1>
+<p>Hủy gói sẽ chuyển tài khoản về Free và giữ lại lịch sử đơn.</p>
+<p id="status" role="status"></p>
+<div class="table">
+<table>
+<thead><tr><th>Tài khoản</th><th>Trạng thái</th><th>Thời điểm kết thúc (giờ Việt Nam)</th><th>Thao tác</th></tr></thead>
+<tbody>{table}</tbody>
+</table>
+</div>
+</main>
+</body>
+</html>""", headers=HEAD)
+
+
+@router.get('/admin/subscriptions.js')
+async def subscriptions_script(user=Depends(root)):
+    return Response((BASE/'warden_admin_subscriptions.js').read_text(),
+                    media_type='text/javascript', headers=HEAD)
 
 
 @router.post('/admin/subscriptions/cancel')

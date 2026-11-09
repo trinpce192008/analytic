@@ -4,6 +4,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
+from pydantic import BaseModel
 from . import user_manager as um
 from .security import verify_token
 from .settings import settings
@@ -60,22 +61,29 @@ def change_group(name,target):
     um.update_user_settings(name,s)
     actual=(um.get_user(name).get('settings') or {}).get('groups',[])
     if set(actual)!=set(desired): raise ValueError('Đọc lại nhóm không khớp; chờ thử lại.')
-def reconcile():
-    now=time.time()
+def reconcile(username=None):
     with connection() as c:
-        subscriptions=c.execute('SELECT * FROM subscriptions').fetchall()
+        c.execute('BEGIN IMMEDIATE')
+        now=time.time()
+        if username is None:
+            subscriptions=c.execute('SELECT * FROM subscriptions').fetchall()
+        else:
+            subscriptions=c.execute('SELECT * FROM subscriptions WHERE username=?',(username,)).fetchall()
         for s in subscriptions:
-            target=VIP if s['expires']>now else FREE
-            state='active' if target==VIP else 'expired'
+            cancelled=s['state'] in ('pending_cancel','cancelled')
+            target=VIP if not cancelled and s['expires']>now else FREE
+            state='cancelled' if cancelled else 'active' if target==VIP else 'expired'
             try:
                 change_group(s['username'],target)
                 if s['state']!=state:
-                    event(c,s['username'],'vip_activated' if target==VIP else 'vip_expired')
+                    action={'active':'vip_activated','expired':'vip_expired','cancelled':'vip_cancelled'}
+                    event(c,s['username'],action[state])
                 c.execute('UPDATE subscriptions SET state=?,error=? WHERE username=?',(state,'',s['username']))
             except Exception as exc:
                 message=str(exc)[:300]
                 if message!=s['error']: event(c,s['username'],'sync_failed',detail=message)
-                c.execute('UPDATE subscriptions SET state=?,error=? WHERE username=?',('pending_grant' if target==VIP else 'pending_revoke',message,s['username']))
+                pending={'active':'pending_grant','expired':'pending_revoke','cancelled':'pending_cancel'}
+                c.execute('UPDATE subscriptions SET state=?,error=? WHERE username=?',(pending[state],message,s['username']))
 async def worker():
     while True:
         try: reconcile()
@@ -130,6 +138,36 @@ async def admin_data(user=Depends(root)):
         logs=[dict(e) for e in c.execute('SELECT * FROM billing_events ORDER BY id DESC LIMIT 100')]
         count=c.execute("SELECT COUNT(*) FROM orders WHERE status='confirmed'").fetchone()[0]
     return {'orders':orders,'subscriptions':subs,'events':logs,'confirmed_test_orders':count,'real_revenue':None}
+
+
+class CancelSubscription(BaseModel):
+    username: str
+    expires: float
+
+
+@router.post('/admin/subscriptions/cancel')
+async def cancel_subscription(body: CancelSubscription,user=Depends(root),guard=Depends(write_guard)):
+    with connection() as c:
+        c.execute('BEGIN IMMEDIATE')
+        subscription=c.execute('SELECT * FROM subscriptions WHERE username=?',(body.username,)).fetchone()
+        if not subscription:
+            raise HTTPException(404,'Không tìm thấy gói do Warden quản lý.')
+        if subscription['state']=='cancelled':
+            return {'status':'cancelled'}
+        if subscription['state']!='pending_cancel':
+            now=time.time()
+            if subscription['expires']!=body.expires or subscription['expires']<=now:
+                raise HTTPException(409,'Gói đã thay đổi hoặc hết hạn. Hãy làm mới danh sách.')
+            c.execute('UPDATE subscriptions SET expires=?,state=?,error=? WHERE username=?',
+                      (now,'pending_cancel','',body.username))
+            event(c,body.username,'vip_cancel_requested',detail=user['username'])
+
+    reconcile(body.username)
+    with connection() as c:
+        status=c.execute('SELECT state FROM subscriptions WHERE username=?',(body.username,)).fetchone()['state']
+    return {'status':status}
+
+
 @router.post('/admin/orders/{oid}/confirm')
 async def confirm(oid:str,user=Depends(root),guard=Depends(write_guard)):
     try:

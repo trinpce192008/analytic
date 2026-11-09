@@ -29,6 +29,13 @@ class TestBilling(unittest.TestCase):
  def order(self):
   r=client.post('/api/warden-billing/orders',json={'plan':'demo_5m'},headers=headers());self.assertEqual(r.status_code,200,r.text);return r.json()['id']
  def confirm(self,oid):return client.post('/api/warden-billing/admin/orders/'+oid+'/confirm',json={},headers=headers('admin'))
+ def subscription(self):
+  with b.connection() as c:
+   return dict(c.execute('SELECT * FROM subscriptions WHERE username=?',('student',)).fetchone())
+ def cancel(self,expires,request_headers=None):
+  return client.post('/api/warden-billing/admin/subscriptions/cancel',
+                     json={'username':'student','expires':expires},
+                     headers=headers('admin') if request_headers is None else request_headers)
  def test_lifecycle(self):
   oid=self.order();self.assertEqual(self.order(),oid)
   self.assertEqual(self.confirm(oid).status_code,200)
@@ -59,4 +66,38 @@ class TestBilling(unittest.TestCase):
   with b.connection() as c:old=c.execute('SELECT expires FROM subscriptions').fetchone()[0]
   self.confirm(self.order())
   with b.connection() as c:self.assertAlmostEqual(c.execute('SELECT expires FROM subscriptions').fetchone()[0],old+300)
+ def test_cancel_preserves_order_and_other_settings(self):
+  oid=self.order()
+  self.confirm(oid)
+  expires=self.subscription()['expires']
+  self.assertEqual(self.cancel(expires,headers()).status_code,403)
+  self.assertEqual(self.cancel(expires,{'test-user':'admin'}).status_code,403)
+  self.assertEqual(self.cancel(expires-1).status_code,409)
+  self.assertEqual(self.cancel(expires).json(),{'status':'cancelled'})
+  self.assertEqual(self.cancel(expires).json(),{'status':'cancelled'})
+  b.reconcile()
+  self.assertEqual(self.subscription()['state'],'cancelled')
+  settings=records['student']['settings']
+  self.assertEqual(settings['groups'],['study','warden_free'])
+  self.assertTrue(settings['harden_container'])
+  with b.connection() as c:
+   self.assertEqual(c.execute('SELECT status FROM orders WHERE id=?',(oid,)).fetchone()[0],'confirmed')
+   self.assertEqual(c.execute("SELECT detail FROM billing_events WHERE action='vip_cancel_requested'").fetchall()[0][0],'admin')
+   self.assertEqual(c.execute("SELECT COUNT(*) FROM billing_events WHERE action='vip_cancelled'").fetchone()[0],1)
+  self.confirm(self.order())
+  self.assertEqual(self.subscription()['state'],'active')
+  self.assertEqual(self.cancel(expires).status_code,409)
+
+ def test_cancel_retries_a_failed_downgrade(self):
+  self.confirm(self.order())
+  expires=self.subscription()['expires']
+  original=u.update_user_settings
+  def fail(*args):raise ValueError('simulated failure')
+  u.update_user_settings=fail
+  try:self.assertEqual(self.cancel(expires).json(),{'status':'pending_cancel'})
+  finally:u.update_user_settings=original
+  self.assertEqual(records['student']['settings']['groups'],['study','warden_vip'])
+  b.reconcile()
+  self.assertEqual(self.subscription()['state'],'cancelled')
+  self.assertEqual(records['student']['settings']['groups'],['study','warden_free'])
 if __name__=='__main__':unittest.main()

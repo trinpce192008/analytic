@@ -9,7 +9,7 @@ START = "<!-- BEGIN WARDEN SIDEBAR -->"
 END = "<!-- END WARDEN SIDEBAR -->"
 BLOCK = (
     START + '\n<link rel="stylesheet" href="/ui/warden-sidebar.css?v=1">'
-    '\n<script src="/ui/warden-sidebar.js?v=2" defer></script>\n' + END + '\n'
+    '\n<script src="/ui/warden-sidebar.js?v=3" defer></script>\n' + END + '\n'
 )
 MANAGED = re.compile(re.escape(START) + r".*?" + re.escape(END) + r"\n?", re.S)
 LEGACY = re.compile(

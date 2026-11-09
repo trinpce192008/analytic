@@ -28,6 +28,11 @@ class TestBilling(unittest.TestCase):
  def tearDown(self):self.tmp.cleanup()
  def order(self):
   r=client.post('/api/warden-billing/orders',json={'plan':'demo_5m'},headers=headers());self.assertEqual(r.status_code,200,r.text);return r.json()['id']
+ def legacy_order(self,plan='demo_5m'):
+  with b.connection() as c:
+   oid=f"LEGACY-{c.execute('SELECT COUNT(*) FROM orders').fetchone()[0]}"
+   c.execute("INSERT INTO orders(id,username,plan,status,created) VALUES(?,'student',?,'pending',?)",(oid,plan,time.time()))
+  return oid
  def confirm(self,oid):return client.post('/api/warden-billing/admin/orders/'+oid+'/confirm',json={},headers=headers('admin'))
  def subscription(self):
   with b.connection() as c:
@@ -37,8 +42,10 @@ class TestBilling(unittest.TestCase):
                      json={'username':'student','expires':expires},
                      headers=headers('admin') if request_headers is None else request_headers)
  def test_lifecycle(self):
-  oid=self.order();self.assertEqual(self.order(),oid)
-  self.assertEqual(self.confirm(oid).status_code,200)
+  oid=self.order()
+  self.assertEqual(self.confirm(oid).json(),{'status':'already_confirmed'})
+  duplicate=client.post('/api/warden-billing/orders',json={'plan':'demo_5m'},headers=headers())
+  self.assertEqual(duplicate.status_code,409)
   s=records['student']['settings'];self.assertEqual(s['groups'],['study','warden_vip']);self.assertTrue(s['harden_container']);self.assertEqual(s['session_limit'],2)
   with b.connection() as c: expiry=c.execute('SELECT expires FROM subscriptions').fetchone()[0]
   self.confirm(oid)
@@ -51,10 +58,12 @@ class TestBilling(unittest.TestCase):
   self.assertEqual(client.post('/api/warden-billing/orders',json={'plan':'demo_5m'},headers={'test-user':'student'}).status_code,403)
   oid=self.order();self.assertEqual(client.post('/api/warden-billing/admin/orders/'+oid+'/confirm',json={},headers=headers()).status_code,403)
  def test_retry_no_extension(self):
-  oid=self.order();original=u.update_user_settings
+  original=u.update_user_settings
   def fail(*args):raise ValueError('simulated failure')
   u.update_user_settings=fail
-  try:self.confirm(oid)
+  try:
+   self.order()
+   self.assertEqual(client.post('/api/warden-billing/orders',json={'plan':'demo_5m'},headers=headers()).status_code,409)
   finally:u.update_user_settings=original
   with b.connection() as c:
    s=c.execute('SELECT * FROM subscriptions').fetchone();self.assertEqual(s['state'],'pending_grant');expiry=s['expires']
@@ -62,10 +71,21 @@ class TestBilling(unittest.TestCase):
   with b.connection() as c:
    s=c.execute('SELECT * FROM subscriptions').fetchone();self.assertEqual(s['state'],'active');self.assertEqual(s['expires'],expiry)
  def test_renew(self):
-  self.confirm(self.order())
+  self.order()
   with b.connection() as c:old=c.execute('SELECT expires FROM subscriptions').fetchone()[0]
-  self.confirm(self.order())
+  self.confirm(self.legacy_order())
   with b.connection() as c:self.assertAlmostEqual(c.execute('SELECT expires FROM subscriptions').fetchone()[0],old+300)
+ def test_auto_confirm_reuses_matching_legacy_order_and_retires_other_test_orders(self):
+  pending=self.legacy_order('vip_30d')
+  other=self.legacy_order()
+  response=client.post('/api/warden-billing/orders',json={'plan':'vip_30d'},headers=headers())
+  self.assertEqual(response.status_code,200)
+  self.assertEqual(response.json()['id'],pending)
+  self.assertIn('warden_vip',records['student']['settings']['groups'])
+  with b.connection() as c:
+   self.assertEqual(tuple(c.execute("SELECT status,confirmed_by,is_test FROM orders WHERE id=?",(pending,)).fetchone()),
+                    ('confirmed','system',1))
+   self.assertEqual(c.execute("SELECT status FROM orders WHERE id=?",(other,)).fetchone()[0],'cancelled')
  def test_cancel_preserves_order_and_other_settings(self):
   oid=self.order()
   self.confirm(oid)
@@ -119,7 +139,7 @@ class TestBilling(unittest.TestCase):
   url='/api/warden-billing'
   confirmed=self.order()
   self.confirm(confirmed)
-  pending=self.order()
+  pending=self.legacy_order()
   self.assertEqual(client.post(url+'/cancel',json={}).status_code,401)
   self.assertEqual(client.post(url+'/cancel',headers={'test-user':'student'},json={}).status_code,403)
   self.assertEqual(client.post(url+'/cancel',headers=headers('admin'),json={}).status_code,400)

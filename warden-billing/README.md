@@ -1,6 +1,6 @@
 # Warden Billing mô phỏng — v1
 
-Module chạy trong Sealskin trên một node. Dùng danh tính từ phiên đăng nhập Sealskin; không yêu cầu khóa quản trị riêng. Người dùng tạo đơn; admin tích hợp giả lập xác nhận; hệ thống tự cấp VIP, gia hạn và thu hồi khi hết hạn. Không kết nối ngân hàng, không xử lý tiền thật.
+Module chạy trong Sealskin trên một node và dùng danh tính từ phiên đăng nhập. Khi người dùng bấm Nâng cấp, hệ thống tự xác nhận đơn mô phỏng, cấp VIP và thu hồi khi hết hạn. Không kết nối ngân hàng, không xử lý tiền thật.
 
 ## Chuẩn bị
 
@@ -56,17 +56,16 @@ Module là trang riêng trên cùng Sealskin, chưa thêm tab vào sidebar gốc
 ## Trình diễn
 
 1. Cửa sổ người dùng bình thường: mở trang, chọn gói VIP thử nghiệm 5 phút, bấm Nâng cấp thử nghiệm. Danh tính người mua lấy từ phiên đăng nhập.
-2. Cửa sổ/ hồ sơ trình duyệt khác: đăng nhập admin, mở cùng trang. Admin thấy danh sách đơn và nút Giả lập thành công.
-3. Xác nhận đơn. Đây là thao tác cấp quyền thật, tiền hoàn toàn mô phỏng.
-4. Trang người dùng tự đọc lại mỗi 10 giây; hiển thị VIP và ngày hết hạn.
-5. Sau 5 phút, tác vụ trên máy chủ (15 giây/lần) thay VIP về Free. Không cần mở trang để tác vụ chạy.
+2. Hệ thống tự xác nhận đơn và đưa tài khoản vào nhóm `warden_vip`. Trang hiển thị trạng thái cấp quyền và ngày hết hạn.
+3. Admin có thể mở cùng trang để kiểm tra đơn đã xác nhận. Các đơn cũ còn chờ vẫn có thể được xác nhận thủ công.
+4. Sau 5 phút, tác vụ trên máy chủ (15 giây/lần) thay VIP về Free. Tác vụ tiếp tục chạy khi trang đóng.
 
 Có thêm gói VIP 30 ngày, giá mô phỏng 429.000 đ. Gói 5 phút giá 0 đ. Chỉnh cấu hình PLANS trong warden_billing.py trước khi cài nếu cần.
 
 ## Quy tắc
 
-- Một đơn pending tại một thời điểm cho mỗi tài khoản; bấm lặp trả lại cùng đơn.
-- Xác nhận lặp không gia hạn lần nữa.
+- Hệ thống dùng lại đơn thử nghiệm còn chờ nếu trùng gói đã chọn và hủy các đơn thử nghiệm còn chờ khác của tài khoản.
+- Bấm lặp khi VIP còn hiệu lực hoặc đang chờ cấp quyền không tạo đơn mới hay gia hạn.
 - Hạn mới = max(hiện tại, hạn cũ) + thời hạn gói. Tính hạn được ghi trong transaction SQLite trước khi cấp quyền.
 - Đã xác nhận và đã cấp quyền là hai trạng thái riêng. Ghi quyền lỗi giữ pending_grant, worker thử lại mà không cộng thêm hạn.
 - Hết hạn chuyển pending_revoke nếu cập nhật lỗi, tiếp tục thử lại.

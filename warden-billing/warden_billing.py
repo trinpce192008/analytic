@@ -31,6 +31,20 @@ def connection():
     finally: c.close()
 def event(c,user,action,oid='',detail=''):
     c.execute('INSERT INTO billing_events(at,username,action,order_id,detail) VALUES(?,?,?,?,?)',(time.time(),user,action,oid,detail))
+def confirm_test_order(c, order_id, name, plan, confirmed_by, expires):
+    now = time.time()
+    expiry = max(now, expires) + PLANS[plan]['seconds']
+    c.execute("UPDATE orders SET status='confirmed',confirmed=?,confirmed_by=? WHERE id=?",
+              (now, confirmed_by, order_id))
+    c.execute(
+        """INSERT INTO subscriptions(username,expires,state) VALUES(?,?,'pending_grant')
+           ON CONFLICT(username) DO UPDATE SET expires=excluded.expires,state='pending_grant',error=''""",
+        (name, expiry),
+    )
+    event(c, name, 'test_payment_confirmed', order_id, 'auto' if confirmed_by == 'system' else '')
+    return expiry
+
+
 def ensure_groups():
     for name in (FREE,VIP):
         g=um.GROUP_DATA.get(name)
@@ -163,23 +177,43 @@ async def cancel_own_subscription(user=Depends(write_guard)):
 
 @router.post('/orders')
 async def create(req:Request,user=Depends(write_guard)):
+    name = user['username']
     try:
-        body=await req.json();p=body.get('plan');ensure_groups();account(user['username'])
-        if p not in PLANS: raise ValueError('Gói không hợp lệ.')
+        body = await req.json()
+        plan = body.get('plan') if isinstance(body, dict) else None
+        if not isinstance(plan, str) or plan not in PLANS:
+            raise ValueError('Gói không hợp lệ.')
+        ensure_groups()
+        account(name)
         with connection() as c:
             c.execute('BEGIN IMMEDIATE')
-            if c.execute(
-                "SELECT 1 FROM subscriptions WHERE username=? AND state IN ('pending_cancel', 'pending_revoke')",
-                (user['username'],),
-            ).fetchone():
+            sub = c.execute('SELECT state, expires FROM subscriptions WHERE username=?', (name,)).fetchone()
+            if sub and sub['state'] in ('pending_cancel', 'pending_revoke'):
                 raise HTTPException(409, 'Đang thu hồi VIP. Hãy chờ đồng bộ trước khi đăng ký gói khác.')
-            existing=c.execute("SELECT id FROM orders WHERE username=? AND status='pending'",(user['username'],)).fetchone()
-            if existing:return {'id':existing['id'],'existing':True}
-            oid='DEMO-'+uuid.uuid4().hex[:16].upper()
-            c.execute('INSERT INTO orders(id,username,plan,status,created) VALUES(?,?,?,?,?)',(oid,user['username'],p,'pending',time.time()))
-            event(c,user['username'],'order_created',oid)
-        return {'id':oid}
-    except (ValueError,AttributeError) as e: raise HTTPException(400,str(e))
+            if sub and sub['state'] in ('active', 'pending_grant') and sub['expires'] > time.time():
+                raise HTTPException(409, 'Tài khoản đã có gói VIP hoặc đang chờ cấp quyền.')
+            existing = c.execute(
+                """SELECT id FROM orders WHERE username=? AND plan=? AND status='pending' AND is_test=1
+                   ORDER BY created DESC LIMIT 1""",
+                (name, plan),
+            ).fetchone()
+            if existing:
+                oid = existing['id']
+            else:
+                oid = 'DEMO-' + uuid.uuid4().hex[:16].upper()
+                c.execute(
+                    'INSERT INTO orders(id,username,plan,status,created) VALUES(?,?,?,?,?)',
+                    (oid, name, plan, 'pending', time.time()),
+                )
+                event(c, name, 'order_created', oid)
+            c.execute("UPDATE orders SET status='cancelled' WHERE username=? AND status='pending' AND is_test=1 AND id<>?",
+                      (name, oid))
+            expiry = confirm_test_order(c, oid, name, plan, 'system', 0)
+
+        reconcile(name)
+        return {'id': oid, 'existing': existing is not None, 'status': 'confirmed', 'expires': expiry}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
 @router.get('/admin')
 async def admin_data(user=Depends(root)):
     with connection() as c:
@@ -300,10 +334,7 @@ async def confirm(oid:str,user=Depends(root),guard=Depends(write_guard)):
             if o['status']=='confirmed':return {'status':'already_confirmed'}
             if o['status']!='pending':raise HTTPException(409,'Đơn không ở trạng thái chờ.')
             account(o['username']);old=c.execute('SELECT expires FROM subscriptions WHERE username=?',(o['username'],)).fetchone()
-            expiry=max(time.time(),old['expires'] if old else 0)+PLANS[o['plan']]['seconds']
-            c.execute("UPDATE orders SET status='confirmed',confirmed=?,confirmed_by=? WHERE id=?",(time.time(),user['username'],oid))
-            c.execute("INSERT INTO subscriptions(username,expires,state) VALUES(?,?,'pending_grant') ON CONFLICT(username) DO UPDATE SET expires=excluded.expires,state='pending_grant',error=''",(o['username'],expiry))
-            event(c,o['username'],'test_payment_confirmed',oid)
-        reconcile()
+            expiry = confirm_test_order(c, oid, o['username'], o['plan'], user['username'], old['expires'] if old else 0)
+        reconcile(o['username'])
         return {'status':'confirmed','expires':expiry}
     except ValueError as e:raise HTTPException(400,str(e))

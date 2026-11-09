@@ -353,3 +353,20 @@ python3 -m unittest test_dashboard test_portal -v
 node --test test_analytics.cjs
 node test_ui.cjs
 ```
+
+## v0.10.1 — Chia sẻ Dashboard Analytics cho người xem
+
+Admin tích hợp dùng **Dashboard Analytics → Chia sẻ Dashboard Analytics**
+để cho phép mọi tài khoản SealSkin đã đăng nhập xem báo cáo toàn hệ thống.
+Người xem mở cùng dashboard qua thanh bên và có quyền đọc số liệu, gồm hoạt
+động của các tài khoản và thông tin đơn thử nghiệm. Chỉ admin tích hợp có
+quyền thay đổi công tắc chia sẻ.
+
+Mặc định chia sẻ tắt. Thiết lập dashboard cá nhân từ v0.10.0 không tự bật
+quyền chia sẻ. Khi admin tắt, máy chủ chặn trang, tệp JavaScript dashboard
+và API dữ liệu của người xem. Tab đang mở kiểm tra lại khi bấm Làm mới hoặc
+ở lần tự tải dữ liệu kế tiếp khi tab hiện, tối đa khoảng 60 giây. Tài khoản
+admin vẫn truy cập dashboard. Đường dẫn dashboard cá nhân cũ chuyển sang
+báo cáo chung nếu tài khoản có quyền xem.
+
+Cài bằng `git pull --ff-only` và `sudo bash install.sh sealskin`.

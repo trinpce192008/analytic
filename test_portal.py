@@ -1,29 +1,17 @@
 """Exercise authorization and storage with simulated SealSkin identities."""
-import datetime as dt
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import test_dashboard
+from test_dashboard import mod, warden_portal
 from patch_sidebar import patch_index
 
 BASE = "/api/warden-portal"
 WRITE = {"sec-fetch-site": "same-origin", "x-warden-portal": "1"}
-
-
-async def verify_token(x_test_role: str = Header(default="")):
-    if not x_test_role:
-        raise HTTPException(401)
-    username = "admin" if x_test_role == "root" else x_test_role
-    return {"username": username, "is_admin": x_test_role in ("root", "staff")}
-
-
-test_dashboard.security.verify_token = verify_token
-from app import warden_portal
 
 
 class PortalTests(unittest.TestCase):
@@ -35,6 +23,7 @@ class PortalTests(unittest.TestCase):
         self.addCleanup(override.stop)
         app = FastAPI()
         app.include_router(warden_portal.router)
+        app.include_router(mod.router)
 
         @app.get("/api/warden-billing/me")
         def billing():
@@ -49,31 +38,42 @@ class PortalTests(unittest.TestCase):
             headers["x-test-role"] = who
         return self.client.request(method, BASE + path, json=body, headers=headers)
 
-    def test_dashboard_switch_blocks_direct_url_and_protects_other_users(self):
-        nav = self.call("GET", "/nav", "alice").json()
-        self.assertFalse(nav["user_dashboard"])
+    def test_shared_dashboard_is_read_only_and_revocable(self):
+        root = {"x-test-role": "root"}
+        viewer = {"x-test-role": "lecturer"}
+        paths = ("/api/warden-analytics", "/api/warden-analytics/app.js",
+                 "/api/warden-analytics/data", BASE + "/dashboard")
+        # An enabled personal dashboard from v0.10.0 must never grant shared access.
+        with warden_portal.database() as db:
+            db.execute("INSERT INTO preferences VALUES ('user_dashboard', 1)")
+        nav = self.call("GET", "/nav", "lecturer").json()
+        self.assertFalse(nav["analytics"])
         self.assertTrue(nav["upgrade"])
-        for path in ("/dashboard", "/dashboard/data"):
-            self.assertEqual(self.call("GET", path, "alice").status_code, 403)
-        update = {"user_dashboard": True}
-        self.assertEqual(self.call("PUT", "/settings", "alice", update, True).status_code, 403)
+        for path in paths:
+            self.assertEqual(self.client.get(path, headers=viewer).status_code, 403)
+        update = {"shared_analytics": True}
+        self.assertEqual(self.call("GET", "/settings", "lecturer").status_code, 403)
+        self.assertEqual(self.call("PUT", "/settings", "lecturer", update, True).status_code, 403)
         self.assertEqual(self.call("PUT", "/settings", "root", update).status_code, 403)
         self.assertEqual(self.call("PUT", "/settings", "root", update, True).status_code, 200)
-        self.assertTrue(self.call("GET", "/nav", "alice").json()["user_dashboard"])
-        now = dt.datetime.now(dt.timezone.utc)
-        events = [
-            {"user": who, "event": action, "session": who + "-private", "app": app,
-             "time": (now - dt.timedelta(minutes=ago)).isoformat()}
-            for who, app in (("alice", "Browser"), ("bob", "Private application"))
-            for action, ago in (("launch", 10), ("stop", 5))
-        ]
-        with patch.object(warden_portal, "load_events", return_value={"events": events, "limited": False}):
-            payload = self.call("GET", "/dashboard/data", "alice")
-        self.assertEqual(payload.json()["apps"], [{"app": "Browser", "launches": 1, "minutes": 5.0}])
-        self.assertNotIn("private", payload.text)
-        self.assertEqual(self.call("PUT", "/settings", "root", {"user_dashboard": False}, True).status_code, 200)
-        self.assertEqual(self.call("GET", "/dashboard/data", "alice").status_code, 403)
-        self.assertTrue(self.call("GET", "/nav", "root").json()["admin_analytics"])
+        self.assertTrue(self.call("GET", "/nav", "lecturer").json()["analytics"])
+        for path in paths:
+            self.assertEqual(self.client.get(path, headers=viewer).status_code, 200)
+            self.assertEqual(self.client.get(path).status_code, 401)
+        self.assertIn('id="dashboard-settings"', self.client.get(paths[0], headers=root).text)
+        self.assertNotIn('id="dashboard-settings"', self.client.get(paths[0], headers=viewer).text)
+        events = {"events": [{"user": "student", "event": "launch"}], "limited": False}
+        with patch.object(mod, "load_events", return_value=events):
+            viewer_data = self.client.get(paths[2], headers=viewer)
+            admin_data = self.client.get(paths[2], headers=root)
+        self.assertEqual(viewer_data.json()["events"], admin_data.json()["events"])
+        self.assertEqual(viewer_data.json()["events"][0]["user"], "student")
+        self.assertEqual(viewer_data.headers["cache-control"], "no-store")
+        self.assertEqual(self.call("PUT", "/settings", "root", {"shared_analytics": False}, True).status_code, 200)
+        self.assertFalse(self.call("GET", "/nav", "lecturer").json()["analytics"])
+        for path in paths:
+            self.assertEqual(self.client.get(path, headers=viewer).status_code, 403)
+            self.assertEqual(self.client.get(path, headers=root).status_code, 200)
 
     def test_support_visibility_and_replies(self):
         self.assertEqual(self.call("GET", "/tickets").status_code, 401)

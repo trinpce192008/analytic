@@ -35,7 +35,7 @@ print('Preflight OK. Installed source supports web authentication and audit logs
 PY
 docker exec -i "$container" python3 - check < patch_sidebar.py
 uidir="$(docker exec "$container" python3 -c 'from app.settings import settings; print(settings.ui_path)')"
-for f in warden_analytics.py warden_analytics.html warden_analytics.js warden_portal.py warden_portal.js warden_personal.html warden_support.html; do
+for f in warden_analytics.py warden_analytics.html warden_analytics.js warden_portal.py warden_portal.js warden_support.html; do
  test -s "$f"
  docker cp "$f" "$container:$appdir/$f"
 done

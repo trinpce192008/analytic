@@ -3,8 +3,7 @@
   if (!sidebar) return;
 
   const links = [
-    ["warden-analytics-button", "Dashboard Analytics", "fa-chart-bar", "/api/warden-analytics", "admin_analytics"],
-    ["warden-personal-button", "Dashboard cá nhân", "fa-chart-bar", "/api/warden-portal/dashboard", "user_dashboard"],
+    ["warden-analytics-button", "Dashboard Analytics", "fa-chart-bar", "/api/warden-analytics", "analytics"],
     ["warden-upgrade-button", "Nâng cấp gói", "fa-arrow-circle-up", "/api/warden-billing", "upgrade"],
     ["warden-support-button", "Hỗ trợ", "fa-life-ring", "/api/warden-portal/support", "support"],
   ];

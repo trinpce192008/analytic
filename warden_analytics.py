@@ -5,20 +5,40 @@ import os
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, Response
-from .security import verify_admin
+from .security import verify_admin, verify_token
 from .settings import settings
 router = APIRouter(prefix='/api/warden-analytics')
 BASE = Path(__file__).parent
+def can_manage_analytics(user):
+    return bool(user.get("is_admin")) and user.get("username") == "admin"
+
+
 async def root_only(user=Depends(verify_admin)):
-    if user.get('username') != 'admin':
-        raise HTTPException(403, 'Warden Analytics is restricted to the built-in admin.')
+    if not can_manage_analytics(user):
+        raise HTTPException(403, "Chỉ admin tích hợp được quản lý Dashboard Analytics.")
     return user
+
+
+def analytics_access(user=Depends(verify_token)):
+    if can_manage_analytics(user):
+        return user
+    from .warden_portal import shared_analytics_enabled
+    if not shared_analytics_enabled():
+        raise HTTPException(403, "Quản trị viên đã tắt quyền xem Dashboard Analytics.")
+    return user
+
+
 HEADERS = {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','Content-Security-Policy':"default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'"}
 @router.get('', response_class=HTMLResponse)
-async def page(user=Depends(root_only)):
-    return HTMLResponse((BASE/'warden_analytics.html').read_text(), headers=HEADERS)
+async def page(user=Depends(analytics_access)):
+    html = (BASE / "warden_analytics.html").read_text()
+    if not can_manage_analytics(user):
+        before, _, rest = html.partition("<!-- BEGIN ANALYTICS SETTINGS -->")
+        _, _, after = rest.partition("<!-- END ANALYTICS SETTINGS -->")
+        html = before + after
+    return HTMLResponse(html, headers=HEADERS)
 @router.get('/app.js')
-async def script(user=Depends(root_only)):
+async def script(user=Depends(analytics_access)):
     return Response((BASE/'warden_analytics.js').read_text(), media_type='text/javascript', headers=HEADERS)
 def load_events(directory, max_bytes=32*1024*1024):
     events=[]; skipped=0; used=0; seen=set(); limited=False
@@ -40,7 +60,7 @@ def load_events(directory, max_bytes=32*1024*1024):
         if limited: break
     return {'events':sorted(events,key=lambda e:e['time']), 'skipped':skipped,'limited':limited}
 @router.get('/data')
-async def data(user=Depends(root_only)):
+async def data(user=Depends(analytics_access)):
     import asyncio
     result=await asyncio.to_thread(load_events,os.path.join(settings.node_state_path,'audit'))
     from . import audit

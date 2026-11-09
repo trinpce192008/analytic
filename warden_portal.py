@@ -1,4 +1,4 @@
-"""Warden sidebar capabilities, private usage dashboard and support inbox."""
+"""Warden sidebar capabilities, shared analytics access and support inbox."""
 import datetime as dt
 import os
 import sqlite3
@@ -6,17 +6,15 @@ from contextlib import closing, contextmanager
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field, StrictBool
 
 from .security import verify_token
-from .settings import settings
-from .warden_analytics import HEADERS, load_events, root_only
+from .warden_analytics import HEADERS, analytics_access, can_manage_analytics, root_only
 
 PREFIX = "/api/warden-portal"
 router = APIRouter(prefix=PREFIX)
 BASE = Path(__file__).parent
-VIETNAM = dt.timezone(dt.timedelta(hours=7))
 DB_PATH = Path("/config/warden-analytics/portal.sqlite3")
 
 
@@ -45,10 +43,10 @@ def database():
             yield db
 
 
-def dashboard_enabled():
+def shared_analytics_enabled():
     with database() as db:
         setting = db.execute(
-            "SELECT value FROM preferences WHERE key = 'user_dashboard'"
+            "SELECT value FROM preferences WHERE key = 'shared_analytics'"
         ).fetchone()
         return bool(setting and setting["value"] == 1)
 
@@ -66,7 +64,7 @@ def write_guard(request: Request):
 
 
 class Preferences(BaseModel):
-    user_dashboard: StrictBool
+    shared_analytics: StrictBool
 
 
 class TicketInput(BaseModel):
@@ -89,18 +87,10 @@ def timestamp():
     return dt.datetime.now(dt.timezone.utc).isoformat()
 
 
-def private_dashboard_access(user=Depends(verify_token)):
-    if not dashboard_enabled():
-        raise HTTPException(403, "Quản trị viên đã tắt dashboard cá nhân.")
-    return user
-
-
 @router.get("/nav")
 def navigation(request: Request, user=Depends(verify_token)):
-    is_admin = bool(user.get("is_admin"))
     return response({
-        "admin_analytics": is_admin and user["username"] == "admin",
-        "user_dashboard": not is_admin and dashboard_enabled(),
+        "analytics": can_manage_analytics(user) or shared_analytics_enabled(),
         "upgrade": any(
             getattr(route, "path", None) == "/api/warden-billing/me"
             for route in request.app.routes
@@ -110,18 +100,18 @@ def navigation(request: Request, user=Depends(verify_token)):
 
 @router.get("/settings")
 def read_preferences(user=Depends(root_only)):
-    return response({"user_dashboard": dashboard_enabled()})
+    return response({"shared_analytics": shared_analytics_enabled()})
 
 
 @router.put("/settings", dependencies=[Depends(write_guard)])
 def update_preferences(body: Preferences, user=Depends(root_only)):
     with database() as db:
         db.execute(
-            "INSERT INTO preferences VALUES ('user_dashboard', ?) "
+            "INSERT INTO preferences VALUES ('shared_analytics', ?) "
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (int(body.user_dashboard),),
+            (int(body.shared_analytics),),
         )
-    return response({"user_dashboard": body.user_dashboard})
+    return response({"shared_analytics": body.shared_analytics})
 
 
 @router.get("/support", response_class=HTMLResponse)
@@ -197,49 +187,6 @@ def reply(ticket_id: int, body: ReplyInput, user=Depends(verify_token)):
     return response({"saved": True}, status=201)
 
 
-@router.get("/dashboard", response_class=HTMLResponse)
-def personal_dashboard(user=Depends(private_dashboard_access)):
-    return HTMLResponse((BASE / "warden_personal.html").read_text(), headers=HEADERS)
-
-
-@router.get("/dashboard/data")
-def personal_data(user=Depends(private_dashboard_access)):
-    audit = load_events(Path(settings.node_state_path) / "audit")
-    now = dt.datetime.now(VIETNAM)
-    start = now.replace(hour=0, minute=0, second=0, microsecond=0) - dt.timedelta(days=29)
-    sessions = {}
-    for event in audit["events"]:
-        if event.get("user") != user["username"] or not event.get("session"):
-            continue
-        action = event["event"]
-        if action not in ("launch", "stop"):
-            continue
-        moment = dt.datetime.fromisoformat(event["time"].replace("Z", "+00:00"))
-        session = sessions.setdefault(event["session"], {})
-        if action not in session or moment < session[action]:
-            session[action] = moment
-            if action == "launch":
-                session["app"] = event.get("app") or "Ứng dụng"
-    usage = {}
-    for session in sessions.values():
-        opened = session.get("launch")
-        if not opened or opened > now:
-            continue
-        closed = session.get("stop")
-        minutes = 0
-        if closed and opened < closed:
-            minutes = max(0, (min(closed, now) - max(opened, start)).total_seconds() / 60)
-        if opened < start and minutes == 0:
-            continue
-        app = usage.setdefault(session["app"], {"launches": 0, "minutes": 0})
-        app["launches"] += int(opened >= start)
-        app["minutes"] += minutes
-    return response({
-        "from": start.date().isoformat(),
-        "to": now.date().isoformat(),
-        "limited": audit["limited"],
-        "apps": [
-            {"app": name, "launches": item["launches"], "minutes": round(item["minutes"], 1)}
-            for name, item in sorted(usage.items(), key=lambda entry: -entry[1]["minutes"])
-        ],
-    })
+@router.get("/dashboard")
+def dashboard_redirect(user=Depends(analytics_access)):
+    return RedirectResponse("/api/warden-analytics", headers=HEADERS)

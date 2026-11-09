@@ -33,31 +33,14 @@
 
   async function setupSettings() {
     const form = byId("dashboard-settings");
-    const checkbox = form.elements.user_dashboard;
+    const checkbox = form.elements.shared_analytics;
     form.addEventListener("submit", event => submit(form, event, async () => {
-      const result = await api("/settings", "PUT", { user_dashboard: checkbox.checked });
-      checkbox.checked = result.user_dashboard;
-      show(result.user_dashboard ? "Đã bật dashboard cá nhân." : "Đã tắt dashboard cá nhân.");
+      const result = await api("/settings", "PUT", { shared_analytics: checkbox.checked });
+      checkbox.checked = result.shared_analytics;
+      show(result.shared_analytics ? "Đã bật quyền xem Dashboard Analytics." : "Đã tắt quyền xem Dashboard Analytics.");
     }));
-    checkbox.checked = (await api("/settings")).user_dashboard;
+    checkbox.checked = (await api("/settings")).shared_analytics;
     form.hidden = false;
-  }
-
-  async function showUsage() {
-    const result = await api("/dashboard/data");
-    byId("usage-period").textContent = "30 ngày gần nhất · " + result.from + " → " + result.to;
-    if (result.limited) show("Nhật ký vượt giới hạn đọc nên số liệu có thể chưa đầy đủ.");
-    const rows = result.apps.map(app => {
-      const row = document.createElement("tr");
-      for (const value of [app.app, app.launches, app.minutes]) {
-        const cell = row.insertCell();
-        cell.textContent = typeof value === "number" ? value.toLocaleString("vi-VN") : value;
-      }
-      return row;
-    });
-    if (!rows.length && !result.limited) show("Chưa có hoạt động được ghi nhận trong kỳ.");
-    byId("usage-apps").replaceChildren(...rows);
-    byId("usage-table").hidden = !rows.length;
   }
 
   function setupSupport() {
@@ -156,7 +139,6 @@
   }
 
   const page = document.body.dataset.wardenPage;
-  const init = byId("dashboard-settings") ? setupSettings
-    : page === "support" ? setupSupport : showUsage;
-  init().catch(error => show(error.message));
+  if (byId("dashboard-settings")) setupSettings().catch(error => show(error.message));
+  else if (page === "support") setupSupport().catch(error => show(error.message));
 })();

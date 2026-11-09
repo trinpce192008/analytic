@@ -22,17 +22,24 @@ appdir="$(docker exec "$container" python3 -c 'import app; from pathlib import P
 docker exec -i "$container" python3 - <<'PY'
 import app,inspect
 from pathlib import Path
+import yaml
 from app import user_manager as u
 from app.security import verify_token
 from app.routers import admin
+from app.settings import settings
 s=(Path(app.__file__).parent/'api.py').read_text()
 assert 'api_app = create_app()' in s,'Unsupported api.py'
 assert 'req.settings.model_dump()' in inspect.getsource(admin.update_user),'Unsupported user update'
 assert hasattr(u,'groups_of') and hasattr(u,'get_effective_settings'),'Unsupported groups API'
-for n in ('warden_free','warden_vip'):
- g=u.GROUP_DATA.get(n)
- assert g is not None, 'Create group '+n+' in Sealskin before installation'
- assert not g.get('settings',{}).get('admin'), 'Disable Administrator on '+n
+# The running API populates GROUP_DATA at startup. This separate Python
+# process checks the persisted definitions without initializing the API.
+groups_dir = Path(settings.groups_base_path)
+for name in ('warden_free', 'warden_vip'):
+ group_file = groups_dir / name
+ assert group_file.is_file(), 'Create group ' + name + ' in Sealskin before installation'
+ group_settings = yaml.safe_load(group_file.read_text(encoding='utf-8'))
+ assert isinstance(group_settings, dict), 'Invalid settings for group ' + name
+ assert not group_settings.get('admin'), 'Disable Administrator on ' + name
 print('Preflight OK')
 PY
 for f in warden_billing.html warden_billing.js warden_billing.py warden_admin_subscriptions.js; do

@@ -14,7 +14,10 @@ PY
  docker restart "$container"
  exit 0
 fi
-[[ "$action" == install ]] || exit 1
+if [[ "$action" != install && "$action" != restore-ui ]]; then
+ echo 'Usage: install.sh [container] [install|restore-ui|rollback]' >&2
+ exit 1
+fi
 appdir="$(docker exec "$container" python3 -c 'import app; from pathlib import Path; print(Path(app.__file__).parent)')"
 docker exec -i "$container" python3 - <<'PY'
 import app,inspect
@@ -32,20 +35,30 @@ for n in ('warden_free','warden_vip'):
  assert not g.get('settings',{}).get('admin'), 'Disable Administrator on '+n
 print('Preflight OK')
 PY
+for f in warden_billing.html warden_billing.js warden_billing.py warden_admin_subscriptions.js; do
+ test -s "$f"
+done
+if [[ "$action" == restore-ui ]]; then
+ docker exec -i -u 0 "$container" python3 - <<'PY'
+from pathlib import Path
+import app, shutil, time
+
+appdir = Path(app.__file__).parent
+backup = Path('/config/warden-billing/backups') / f'restore-ui-{time.time_ns()}'
+backup.mkdir(parents=True, mode=0o700)
+for name in ('warden_billing.html', 'warden_billing.js'):
+    path = appdir / name
+    if path.is_file():
+        shutil.copy2(path, backup / name)
+print(f'Payment UI backup: {backup}')
+PY
+fi
 for f in warden_billing.html warden_billing.js; do
- if ! docker exec "$container" test -e "$appdir/$f"; then
-  test -s "$f"
+ if [[ "$action" == restore-ui ]] || ! docker exec "$container" test -e "$appdir/$f"; then
   docker cp "$f" "$container:$appdir/$f"
  fi
 done
-# Revert only the exact stock script from the release that added cancellation to Billing.
-previous_sidebar_release_js="c98285301abd8b69fa46328436c9e731c41b9f1f579c739e2bb462915bbdc77a"
-installed_js="$(docker exec "$container" python3 -c 'import hashlib, sys; from pathlib import Path; print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())' "$appdir/warden_billing.js")"
-if [[ "$installed_js" == "$previous_sidebar_release_js" ]]; then
- docker cp warden_billing.js "$container:$appdir/warden_billing.js"
-fi
 for f in warden_billing.py warden_admin_subscriptions.js; do
- test -s "$f"
  docker cp "$f" "$container:$appdir/$f"
 done
 docker exec "$container" python3 -c 'from app.warden_billing import router; print("Billing module imports OK")'

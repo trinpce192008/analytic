@@ -30,6 +30,11 @@ sudo bash install.sh sealskin
 
 Những lệnh Git này chỉ áp dụng sau khi bạn đã đưa thư mục lên repository. Bộ cài hiện được cung cấp dưới dạng ZIP, chưa tự đẩy vào repository.
 
+Trên máy đã cài, chế độ `install` giữ các tệp giao diện hiện tại. Dùng
+`sudo bash install.sh sealskin restore-ui` trong thư mục `warden-billing` để
+cài lại giao diện thẻ Free, VIP 5 phút và VIP 30 ngày. Chế độ này sao lưu
+HTML và JavaScript hiện tại trong `/config/warden-billing/backups/restore-ui-*`.
+
 ## Mở trang
 
 Đăng nhập Sealskin, mở trên cùng origin:

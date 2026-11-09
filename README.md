@@ -317,3 +317,39 @@ bộ lọc trong DOM mô phỏng. Chưa kiểm thử trực quan hoặc cài tr�
 
 Kiểm tra: phép tính, DOM drill/return, loại phiên thiếu gói khỏi báo cáo và
 bộ chọn ứng dụng, kích thước SVG/số trên cột. Chưa xác minh trực quan trên máy chủ.
+
+## v0.10.0 — Thanh bên, hỗ trợ và quyền xem
+
+Trên thanh bên SealSkin, **Dashboard Analytics** mở báo cáo toàn hệ thống cho
+admin tích hợp. **Nâng cấp gói** xuất hiện khi module billing đã được cài.
+Mục **Hỗ trợ** dùng phiên đăng nhập SealSkin. Người dùng gửi và theo dõi yêu cầu
+của chính mình. Quản trị viên xem danh sách chung và trả lời từng yêu cầu.
+Người dùng đọc phản hồi trong mục Hỗ trợ.
+
+Trong **Dashboard Analytics**, mục **Quyền xem dashboard cá nhân** cho phép
+admin bật hoặc tắt quyền cho người dùng. Mặc định tắt. Khi bật, người dùng xem
+lượt mở và thời lượng theo ứng dụng của tài khoản mình trong 30 ngày gần nhất.
+Khi tắt, máy chủ từ chối cả trang và API dữ liệu cá nhân. Thời lượng đọc từ
+nhật ký node hiện tại, chỉ tính phiên có đủ mốc mở và đóng.
+
+Cập nhật trong thư mục repo hiện tại:
+
+```bash
+cd /home/ubuntu/analytic
+git pull --ff-only
+sudo bash install.sh sealskin
+```
+
+Bộ cài dùng thanh bên `#rail .rail-links` của SealSkin. Nó tạm ngừng hai script
+nút cũ trong `index.html` và khôi phục chúng khi rollback. Bộ cài khởi động lại
+container. Dữ liệu hỗ trợ và thiết lập quyền được lưu tại
+`/config/warden-analytics/portal.sqlite3` trên node hiện tại. Rollback giữ dữ
+liệu trong tệp này. Sau khi cập nhật, tải lại trang SealSkin để thấy thanh bên mới.
+
+Kiểm thử cục bộ với xác thực mô phỏng:
+
+```bash
+python3 -m unittest test_dashboard test_portal -v
+node --test test_analytics.cjs
+node test_ui.cjs
+```

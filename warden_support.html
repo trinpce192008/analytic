@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hỗ trợ · Warden</title>
+  <style>
+    body{margin:0;background:#f4f7fc;color:#192946;font:16px system-ui}
+    main{max-width:960px;margin:auto;padding:2rem 1rem}
+    section{margin:1.3rem 0;padding:1.2rem;background:white;border:1px solid #dbe3ef;border-radius:14px}
+    h2{margin-top:0;font-size:1.25rem}a{color:#205ac8}
+    label{display:block;margin:.7rem 0;font-weight:600}
+    input,textarea{display:block;width:100%;box-sizing:border-box;margin-top:.3rem;padding:.65rem;border:1px solid #9caec8;border-radius:7px;font:inherit}
+    button{font:inherit;cursor:pointer;border:1px solid #bdcce1;border-radius:7px;padding:.55rem .85rem;background:#edf4ff;color:#16499f}
+    button:disabled{opacity:.55;cursor:default}
+    ul{padding:0;list-style:none}li{padding:.65rem 0;border-top:1px solid #edf0f6}
+    .message{white-space:pre-wrap;overflow-wrap:anywhere}
+    .meta{color:#475a73;font-size:.9rem;display:block;margin:.3rem 0}
+    [role=status]{color:#364b69} [hidden]{display:none!important}
+  </style>
+</head>
+<body data-warden-page="support">
+<main>
+  <a href="/">← Về trang chủ</a>
+  <h1>Hỗ trợ Warden</h1>
+  <p id="portal-status" role="status"></p>
+  <section id="ticket-compose" hidden>
+    <h2>Gửi yêu cầu hỗ trợ</h2>
+    <form id="ticket-create">
+      <label>Tiêu đề <input name="subject" maxlength="120" required></label>
+      <label>Nội dung <textarea name="message" rows="4" maxlength="4000" required></textarea></label>
+      <button type="submit">Gửi yêu cầu</button>
+    </form>
+  </section>
+  <section>
+    <h2 id="ticket-list-title">Yêu cầu của tôi</h2>
+    <button type="button" id="ticket-reload">Làm mới</button>
+    <ul id="ticket-list"></ul>
+    <button type="button" id="ticket-prev" hidden>Trang trước</button>
+    <button type="button" id="ticket-next" hidden>Trang sau</button>
+  </section>
+  <section id="ticket-detail" hidden>
+    <h2 id="ticket-subject"></h2>
+    <p id="ticket-meta" class="meta"></p>
+    <p id="ticket-message" class="message"></p>
+    <h3>Phản hồi</h3>
+    <div id="ticket-replies"></div>
+    <form id="ticket-reply" hidden>
+      <label>Nội dung phản hồi <textarea name="message" rows="3" maxlength="4000" required></textarea></label>
+      <button type="submit">Gửi phản hồi</button>
+    </form>
+  </section>
+</main>
+<script src="/api/warden-portal/app.js" defer></script>
+</body>
+</html>

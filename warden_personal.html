@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard cá nhân · Warden</title>
+  <style>
+    body{margin:0;background:#f4f7fc;color:#192946;font:16px system-ui}
+    main{max-width:900px;margin:auto;padding:2rem 1rem}
+    a{color:#205ac8}
+    section{padding:1.2rem;background:white;border:1px solid #dbe3ef;border-radius:14px}
+    table{border-collapse:collapse;width:100%;text-align:left}
+    th,td{padding:.75rem;border-bottom:1px solid #e5ebf4;overflow-wrap:anywhere}
+  </style>
+</head>
+<body data-warden-page="dashboard">
+<main>
+  <a href="/">← Về trang chủ</a>
+  <h1>Dashboard cá nhân</h1>
+  <p id="usage-period"></p>
+  <p id="portal-status" role="status"></p>
+  <section id="usage-table" hidden>
+    <h2>Hoạt động theo ứng dụng</h2>
+    <table><thead><tr><th>Ứng dụng</th><th>Lượt mở</th><th>Phút sử dụng</th></tr></thead>
+    <tbody id="usage-apps"></tbody></table>
+    <p>Thời lượng tính theo các phiên có đủ mốc mở và đóng được ghi nhận.</p>
+  </section>
+</main>
+<script src="/api/warden-portal/app.js" defer></script>
+</body>
+</html>
